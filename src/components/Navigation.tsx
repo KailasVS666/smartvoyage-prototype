@@ -2,18 +2,21 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const location = useLocation();
 
   const navLinks = [
-    { name: "Home", href: "#home" },
-    { name: "Features", href: "#features" },
-    { name: "How It Works", href: "#how-it-works" },
-    { name: "Tours", href: "#tours" },
-    { name: "Testimonials", href: "#testimonials" },
-    { name: "Contact", href: "#contact" },
+    { name: "Home", href: "/" },
+    { name: "Explore", href: "/tours" },
+    { name: "Planner", href: "/plan" },
+    { name: "About", href: "/about" },
+    { name: "Contact", href: "/contact" },
   ];
+
+  const isActive = (href: string) => location.pathname === href;
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-sm border-b border-gray-800">
@@ -21,22 +24,33 @@ const Navigation = () => {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div className="flex-shrink-0">
-            <h1 className="text-2xl font-bold text-teal-400 glow-text">SmartVoyage</h1>
+            <Link to="/">
+              <h1 className="text-2xl font-bold text-teal-400 glow-text">SmartVoyage</h1>
+            </Link>
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:block">
-            <div className="ml-10 flex items-baseline space-x-8">
+          <div className="hidden md:flex items-center space-x-8">
+            <div className="flex items-baseline space-x-8">
               {navLinks.map((link) => (
-                <a
+                <Link
                   key={link.name}
-                  href={link.href}
-                  className="text-gray-300 hover:text-teal-400 px-3 py-2 text-sm font-medium transition-colors duration-200"
+                  to={link.href}
+                  className={`px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+                    isActive(link.href)
+                      ? "text-teal-400 border-b-2 border-teal-400"
+                      : "text-gray-300 hover:text-teal-400"
+                  }`}
                 >
                   {link.name}
-                </a>
+                </Link>
               ))}
             </div>
+            <Link to="/plan">
+              <Button className="bg-teal-500 hover:bg-teal-400 text-black font-semibold">
+                Plan Trip
+              </Button>
+            </Link>
           </div>
 
           {/* Mobile menu button */}
@@ -55,18 +69,29 @@ const Navigation = () => {
 
       {/* Mobile Navigation */}
       {isOpen && (
-        <div className="md:hidden bg-black/95 backdrop-blur-sm">
+        <div className="md:hidden bg-black/95 backdrop-blur-sm border-t border-gray-800">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
             {navLinks.map((link) => (
-              <a
+              <Link
                 key={link.name}
-                href={link.href}
-                className="text-gray-300 hover:text-teal-400 block px-3 py-2 text-base font-medium transition-colors duration-200"
+                to={link.href}
+                className={`block px-3 py-2 text-base font-medium transition-colors duration-200 ${
+                  isActive(link.href)
+                    ? "text-teal-400 bg-teal-500/10"
+                    : "text-gray-300 hover:text-teal-400 hover:bg-teal-500/10"
+                }`}
                 onClick={() => setIsOpen(false)}
               >
                 {link.name}
-              </a>
+              </Link>
             ))}
+            <div className="px-3 py-2">
+              <Link to="/plan" onClick={() => setIsOpen(false)}>
+                <Button className="w-full bg-teal-500 hover:bg-teal-400 text-black font-semibold">
+                  Plan Trip
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       )}

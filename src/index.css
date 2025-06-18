@@ -124,6 +124,16 @@ html {
   animation: float 3s ease-in-out infinite;
 }
 
+/* Page transition animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-transition {
+  animation: fadeIn 0.5s ease-out;
+}
+
 /* Custom gradient backgrounds */
 .gradient-dark {
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
@@ -138,4 +148,12 @@ html {
 .border-glow:hover {
   border-color: rgba(20, 184, 166, 0.6);
   box-shadow: 0 0 20px rgba(20, 184, 166, 0.2);
+}
+
+/* Responsive utilities */
+@media (max-width: 640px) {
+  .mobile-padding {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
 }

@@ -7,6 +7,7 @@ import HowItWorks from "../components/HowItWorks";
 import Testimonials from "../components/Testimonials";
 import CallToAction from "../components/CallToAction";
 import Footer from "../components/Footer";
+import ScrollToTop from "../components/ScrollToTop";
 
 const Index = () => {
   return (
@@ -21,6 +22,7 @@ const Index = () => {
         <CallToAction />
       </main>
       <Footer />
+      <ScrollToTop />
     </div>
   );
 };
