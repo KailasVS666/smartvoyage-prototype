@@ -122,34 +122,6 @@ const About = () => {
           </div>
         </section>
 
-        {/* Team Section */}
-        <section className="py-16 sm:py-20 bg-black">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">
-              Meet the <span className="text-teal-400 glow-text">Creator</span>
-            </h2>
-            
-            <Card className="bg-gray-900 border-gray-800 max-w-2xl mx-auto">
-              <CardContent className="p-6 sm:p-8">
-                <div className="flex flex-col items-center">
-                  <img
-                    src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face"
-                    alt="Creator"
-                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-teal-500/30 mb-6"
-                  />
-                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">Alex Rivera</h3>
-                  <p className="text-teal-400 mb-4">Founder & CEO</p>
-                  <p className="text-gray-400 leading-relaxed max-w-lg text-sm sm:text-base">
-                    A passionate traveler and tech enthusiast with over 50 countries visited. 
-                    Alex combines a love for exploration with expertise in AI to make travel 
-                    planning effortless for everyone.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-
         {/* CTA Section */}
         <section className="py-16 sm:py-20 bg-gradient-to-r from-teal-600 to-teal-800">
           <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">

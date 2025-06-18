@@ -1,6 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const CallToAction = () => {
   return (
@@ -22,13 +23,15 @@ const CallToAction = () => {
           Join thousands of travelers who trust SmartVoyage to create unforgettable experiences
         </p>
 
-        <Button 
-          size="lg" 
-          className="bg-black hover:bg-gray-900 text-white font-semibold px-12 py-4 text-lg transition-all duration-300 hover:scale-105 hover:shadow-xl"
-        >
-          Plan My Trip
-          <ArrowRight className="ml-2 h-5 w-5" />
-        </Button>
+        <Link to="/plan">
+          <Button 
+            size="lg" 
+            className="bg-black hover:bg-gray-900 text-white font-semibold px-12 py-4 text-lg transition-all duration-300 hover:scale-105 hover:shadow-xl"
+          >
+            Plan My Trip
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </Button>
+        </Link>
       </div>
     </section>
   );

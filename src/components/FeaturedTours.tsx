@@ -7,7 +7,7 @@ const FeaturedTours = () => {
     {
       id: 1,
       name: "Paris Essentials",
-      image: "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=600&h=400&fit=crop",
+      image: "https://images.unsplash.com/photo-1549144511-f099e773c147?w=600&h=400&fit=crop",
       description: "7 days exploring the City of Light",
       price: "From $1,299"
     },
