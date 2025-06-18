@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, Calendar, Users, DollarSign, Download, Plus } from "lucide-react";
+import { MapPin, Calendar, Users, DollarSign, Download, Plus, Clock, Camera, Utensils } from "lucide-react";
 import Navigation from "../components/Navigation";
 import Footer from "../components/Footer";
 import ScrollToTop from "../components/ScrollToTop";
@@ -18,11 +18,46 @@ const Plan = () => {
   });
 
   const [itinerary, setItinerary] = useState([
-    { day: 1, activities: ["Arrival & Check-in", "City Walking Tour", "Welcome Dinner"] },
-    { day: 2, activities: ["Museum Visit", "Local Market Exploration", "Traditional Lunch"] },
-    { day: 3, activities: ["Adventure Activity", "Scenic Viewpoint", "Cultural Show"] },
-    { day: 4, activities: ["Relaxation Day", "Spa Treatment", "Sunset Photography"] },
-    { day: 5, activities: ["Souvenir Shopping", "Final Sightseeing", "Departure"] }
+    { 
+      day: 1, 
+      activities: [
+        { time: "9:00 AM", activity: "Arrival & Hotel Check-in", icon: MapPin },
+        { time: "2:00 PM", activity: "City Walking Tour", icon: Camera },
+        { time: "7:00 PM", activity: "Welcome Dinner at Local Restaurant", icon: Utensils }
+      ]
+    },
+    { 
+      day: 2, 
+      activities: [
+        { time: "10:00 AM", activity: "Museum Visit", icon: Camera },
+        { time: "1:00 PM", activity: "Traditional Lunch", icon: Utensils },
+        { time: "3:00 PM", activity: "Local Market Exploration", icon: MapPin }
+      ]
+    },
+    { 
+      day: 3, 
+      activities: [
+        { time: "8:00 AM", activity: "Adventure Activity", icon: Camera },
+        { time: "12:00 PM", activity: "Scenic Viewpoint", icon: MapPin },
+        { time: "6:00 PM", activity: "Cultural Show", icon: Users }
+      ]
+    },
+    { 
+      day: 4, 
+      activities: [
+        { time: "10:00 AM", activity: "Spa Treatment", icon: Users },
+        { time: "2:00 PM", activity: "Relaxation Day", icon: Clock },
+        { time: "6:00 PM", activity: "Sunset Photography", icon: Camera }
+      ]
+    },
+    { 
+      day: 5, 
+      activities: [
+        { time: "9:00 AM", activity: "Souvenir Shopping", icon: MapPin },
+        { time: "12:00 PM", activity: "Final Sightseeing", icon: Camera },
+        { time: "4:00 PM", activity: "Departure", icon: Clock }
+      ]
+    }
   ]);
 
   const handleInputChange = (field: string, value: string | number) => {
@@ -32,7 +67,10 @@ const Plan = () => {
   const addActivity = (dayIndex: number) => {
     setItinerary(prev => prev.map((day, index) => 
       index === dayIndex 
-        ? { ...day, activities: [...day.activities, "New Activity"] }
+        ? { 
+            ...day, 
+            activities: [...day.activities, { time: "12:00 PM", activity: "New Activity", icon: Clock }] 
+          }
         : day
     ));
   };
@@ -148,7 +186,8 @@ const Plan = () => {
                 </Button>
               </div>
 
-              <div className="space-y-4">
+              {/* Day-by-Day Itinerary */}
+              <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
                 {itinerary.map((day, index) => (
                   <Card key={day.day} className="bg-gray-900 border-gray-800">
                     <CardHeader className="pb-3">
@@ -169,13 +208,23 @@ const Plan = () => {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {day.activities.map((activity, actIndex) => (
+                        {day.activities.map((item, actIndex) => (
                           <div
                             key={actIndex}
                             className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
                           >
-                            <div className="w-2 h-2 bg-teal-400 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-300">{activity}</span>
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className="w-8 h-8 bg-teal-500/10 rounded-full flex items-center justify-center border border-teal-500/30">
+                                <item.icon className="h-4 w-4 text-teal-400" />
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Clock className="h-3 w-3 text-gray-500" />
+                                  <span className="text-teal-400 text-sm font-medium">{item.time}</span>
+                                </div>
+                                <span className="text-gray-300 text-sm">{item.activity}</span>
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -184,17 +233,30 @@ const Plan = () => {
                 ))}
               </div>
 
-              {/* Map Placeholder */}
+              {/* Static Map Preview */}
               <Card className="bg-gray-900 border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-white">Interactive Map</CardTitle>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-teal-400" />
+                    Route Map
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="w-full h-48 sm:h-64 bg-gray-800 rounded-lg flex items-center justify-center">
-                    <div className="text-center text-gray-400">
-                      <MapPin className="h-12 w-12 mx-auto mb-2 text-teal-400" />
-                      <p>Interactive map will appear here</p>
-                      <p className="text-sm">Showing route and locations</p>
+                  <div className="relative w-full h-48 sm:h-64 bg-gray-800 rounded-lg overflow-hidden border border-teal-500/30">
+                    <img
+                      src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop"
+                      alt="Route Map"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20"></div>
+                    
+                    {/* Map Markers */}
+                    <div className="absolute top-1/4 left-1/3 w-3 h-3 bg-teal-400 rounded-full border-2 border-white shadow-lg animate-pulse"></div>
+                    <div className="absolute top-1/2 right-1/4 w-3 h-3 bg-teal-400 rounded-full border-2 border-white shadow-lg animate-pulse"></div>
+                    <div className="absolute bottom-1/3 left-1/2 w-3 h-3 bg-teal-400 rounded-full border-2 border-white shadow-lg animate-pulse"></div>
+                    
+                    <div className="absolute bottom-4 left-4 text-white text-sm bg-black/60 px-2 py-1 rounded">
+                      <p>Interactive map showing your route and key locations</p>
                     </div>
                   </div>
                 </CardContent>

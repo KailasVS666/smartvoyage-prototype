@@ -16,7 +16,7 @@ const Tours = () => {
     {
       id: 1,
       name: "Paris Essentials",
-      image: "https://images.unsplash.com/photo-1502602898536-47ad22581b52?w=600&h=400&fit=crop",
+      image: "https://images.unsplash.com/photo-1549144511-f099e773c147?w=600&h=400&fit=crop",
       location: "Paris, France",
       duration: "7 days",
       price: "From $1,299",
@@ -229,6 +229,48 @@ const Tours = () => {
                 </Button>
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Static Map Preview Section */}
+        <section className="py-16 sm:py-20 bg-gray-900">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+                Explore <span className="text-teal-400 glow-text">Destinations</span>
+              </h2>
+              <p className="text-lg text-gray-400 max-w-2xl mx-auto">
+                Discover amazing locations around the world with our curated tour experiences
+              </p>
+            </div>
+
+            <div className="relative max-w-4xl mx-auto">
+              <div className="relative overflow-hidden rounded-2xl border-2 border-teal-500/30 hover:border-teal-400/50 transition-colors duration-300">
+                <img
+                  src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=500&fit=crop"
+                  alt="World Map"
+                  className="w-full h-64 sm:h-80 object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20"></div>
+                
+                {/* Map Markers */}
+                <div className="absolute top-1/4 left-1/4 w-4 h-4 bg-teal-400 rounded-full border-2 border-white shadow-lg animate-pulse">
+                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-2 py-1 rounded text-xs whitespace-nowrap border border-teal-400/30">
+                    Paris, France
+                  </div>
+                </div>
+                <div className="absolute top-1/3 right-1/3 w-4 h-4 bg-teal-400 rounded-full border-2 border-white shadow-lg animate-pulse">
+                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-2 py-1 rounded text-xs whitespace-nowrap border border-teal-400/30">
+                    Kyoto, Japan
+                  </div>
+                </div>
+                <div className="absolute bottom-1/3 left-1/3 w-4 h-4 bg-teal-400 rounded-full border-2 border-white shadow-lg animate-pulse">
+                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-2 py-1 rounded text-xs whitespace-nowrap border border-teal-400/30">
+                    Goa, India
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
