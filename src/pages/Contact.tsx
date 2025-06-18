@@ -33,29 +33,29 @@ const Contact = () => {
       
       <main className="pt-20">
         {/* Header */}
-        <section className="py-16 bg-gradient-to-b from-gray-900 to-black">
+        <section className="py-12 sm:py-16 bg-gradient-to-b from-gray-900 to-black">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-6">
               Get in <span className="text-teal-400 glow-text">Touch</span>
             </h1>
-            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+            <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto">
               Have questions about your next trip? We're here to help you plan the perfect adventure.
             </p>
           </div>
         </section>
 
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
             
             {/* Contact Form */}
             <div>
               <Card className="bg-gray-900 border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-white text-2xl">Send us a Message</CardTitle>
+                  <CardTitle className="text-white text-xl sm:text-2xl">Send us a Message</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-gray-400 mb-2">Name *</label>
                         <input
@@ -116,14 +116,14 @@ const Contact = () => {
             </div>
 
             {/* Contact Info */}
-            <div className="space-y-8">
+            <div className="space-y-6 sm:space-y-8">
               <Card className="bg-gray-900 border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-white text-2xl">Contact Information</CardTitle>
+                  <CardTitle className="text-white text-xl sm:text-2xl">Contact Information</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center">
+                    <div className="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Mail className="h-6 w-6 text-teal-400" />
                     </div>
                     <div>
@@ -133,7 +133,7 @@ const Contact = () => {
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center">
+                    <div className="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Phone className="h-6 w-6 text-teal-400" />
                     </div>
                     <div>
@@ -143,7 +143,7 @@ const Contact = () => {
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center">
+                    <div className="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                       <MapPin className="h-6 w-6 text-teal-400" />
                     </div>
                     <div>
@@ -157,7 +157,7 @@ const Contact = () => {
               {/* Social Links */}
               <Card className="bg-gray-900 border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-white text-2xl">Follow Us</CardTitle>
+                  <CardTitle className="text-white text-xl sm:text-2xl">Follow Us</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-4">

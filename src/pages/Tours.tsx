@@ -99,67 +99,69 @@ const Tours = () => {
       
       <main className="pt-20">
         {/* Header Section */}
-        <section className="py-16 bg-gradient-to-b from-gray-900 to-black">
+        <section className="py-12 sm:py-16 bg-gradient-to-b from-gray-900 to-black">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-6">
               Explore <span className="text-teal-400 glow-text">Tours</span>
             </h1>
-            <p className="text-xl text-gray-400 max-w-3xl mx-auto">
+            <p className="text-lg sm:text-xl text-gray-400 max-w-3xl mx-auto">
               Discover handpicked destinations and experiences curated by our AI travel planner
             </p>
           </div>
         </section>
 
         {/* Filters Section */}
-        <section className="py-8 bg-gray-900 border-b border-gray-800">
+        <section className="py-6 sm:py-8 bg-gray-900 border-b border-gray-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap gap-6 items-center justify-center md:justify-start">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-4 sm:gap-6 items-start sm:items-center">
               <div className="flex items-center gap-2">
                 <Filter className="h-5 w-5 text-teal-400" />
                 <span className="text-white font-medium">Filters:</span>
               </div>
               
-              <select
-                value={budgetFilter}
-                onChange={(e) => setBudgetFilter(e.target.value)}
-                className="bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 focus:border-teal-400 focus:outline-none"
-              >
-                <option value="all">All Budgets</option>
-                <option value="low">Budget ($300-600)</option>
-                <option value="mid">Mid-range ($600-1200)</option>
-                <option value="luxury">Luxury ($1200+)</option>
-              </select>
+              <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+                <select
+                  value={budgetFilter}
+                  onChange={(e) => setBudgetFilter(e.target.value)}
+                  className="bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 focus:border-teal-400 focus:outline-none min-w-0 sm:min-w-[150px]"
+                >
+                  <option value="all">All Budgets</option>
+                  <option value="low">Budget ($300-600)</option>
+                  <option value="mid">Mid-range ($600-1200)</option>
+                  <option value="luxury">Luxury ($1200+)</option>
+                </select>
 
-              <select
-                value={vibeFilter}
-                onChange={(e) => setVibeFilter(e.target.value)}
-                className="bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 focus:border-teal-400 focus:outline-none"
-              >
-                <option value="all">All Vibes</option>
-                <option value="adventurous">Adventurous</option>
-                <option value="relaxing">Relaxing</option>
-                <option value="romantic">Romantic</option>
-                <option value="group">Group</option>
-                <option value="solo">Solo</option>
-              </select>
+                <select
+                  value={vibeFilter}
+                  onChange={(e) => setVibeFilter(e.target.value)}
+                  className="bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 focus:border-teal-400 focus:outline-none min-w-0 sm:min-w-[150px]"
+                >
+                  <option value="all">All Vibes</option>
+                  <option value="adventurous">Adventurous</option>
+                  <option value="relaxing">Relaxing</option>
+                  <option value="romantic">Romantic</option>
+                  <option value="group">Group</option>
+                  <option value="solo">Solo</option>
+                </select>
 
-              <select
-                value={destinationType}
-                onChange={(e) => setDestinationType(e.target.value)}
-                className="bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 focus:border-teal-400 focus:outline-none"
-              >
-                <option value="all">All Destinations</option>
-                <option value="domestic">Domestic</option>
-                <option value="international">International</option>
-              </select>
+                <select
+                  value={destinationType}
+                  onChange={(e) => setDestinationType(e.target.value)}
+                  className="bg-gray-800 text-white border border-gray-700 rounded-lg px-4 py-2 focus:border-teal-400 focus:outline-none min-w-0 sm:min-w-[150px]"
+                >
+                  <option value="all">All Destinations</option>
+                  <option value="domestic">Domestic</option>
+                  <option value="international">International</option>
+                </select>
+              </div>
             </div>
           </div>
         </section>
 
         {/* Tours Grid */}
-        <section className="py-16 bg-black">
+        <section className="py-12 sm:py-16 bg-black">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
               {filteredTours.map((tour) => (
                 <Card
                   key={tour.id}
@@ -174,16 +176,16 @@ const Tours = () => {
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                   </div>
                   
-                  <CardHeader>
-                    <CardTitle className="text-white group-hover:text-teal-400 transition-colors">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-white group-hover:text-teal-400 transition-colors text-lg">
                       {tour.name}
                     </CardTitle>
                   </CardHeader>
                   
                   <CardContent className="space-y-4">
-                    <p className="text-gray-400">{tour.description}</p>
+                    <p className="text-gray-400 text-sm">{tour.description}</p>
                     
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-gray-500">
                       <div className="flex items-center gap-1">
                         <MapPin className="h-4 w-4" />
                         <span>{tour.location}</span>

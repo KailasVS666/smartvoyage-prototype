@@ -43,19 +43,19 @@ const Plan = () => {
       
       <main className="pt-20">
         {/* Header */}
-        <section className="py-16 bg-gradient-to-b from-gray-900 to-black">
+        <section className="py-12 sm:py-16 bg-gradient-to-b from-gray-900 to-black">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-6">
               Trip <span className="text-teal-400 glow-text">Planner</span>
             </h1>
-            <p className="text-xl text-gray-400">
+            <p className="text-lg sm:text-xl text-gray-400">
               Create your perfect itinerary with AI-powered suggestions
             </p>
           </div>
         </section>
 
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
             
             {/* Planning Form */}
             <div className="space-y-8">
@@ -137,11 +137,11 @@ const Plan = () => {
 
             {/* Itinerary Display */}
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <h2 className="text-2xl font-bold text-white">Your Itinerary</h2>
                 <Button 
                   size="sm" 
-                  className="bg-gray-800 hover:bg-gray-700 text-teal-400 border border-teal-400"
+                  className="bg-gray-800 hover:bg-gray-700 text-teal-400 border border-teal-400 w-full sm:w-auto"
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
@@ -174,7 +174,7 @@ const Plan = () => {
                             key={actIndex}
                             className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
                           >
-                            <div className="w-2 h-2 bg-teal-400 rounded-full"></div>
+                            <div className="w-2 h-2 bg-teal-400 rounded-full flex-shrink-0"></div>
                             <span className="text-gray-300">{activity}</span>
                           </div>
                         ))}
@@ -190,7 +190,7 @@ const Plan = () => {
                   <CardTitle className="text-white">Interactive Map</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="w-full h-64 bg-gray-800 rounded-lg flex items-center justify-center">
+                  <div className="w-full h-48 sm:h-64 bg-gray-800 rounded-lg flex items-center justify-center">
                     <div className="text-center text-gray-400">
                       <MapPin className="h-12 w-12 mx-auto mb-2 text-teal-400" />
                       <p>Interactive map will appear here</p>

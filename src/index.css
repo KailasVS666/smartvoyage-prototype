@@ -38,19 +38,12 @@
     --radius: 0.5rem;
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
@@ -150,10 +143,48 @@ html {
   box-shadow: 0 0 20px rgba(20, 184, 166, 0.2);
 }
 
-/* Responsive utilities */
+/* Enhanced mobile responsiveness */
 @media (max-width: 640px) {
   .mobile-padding {
     padding-left: 1rem;
     padding-right: 1rem;
   }
+  
+  /* Ensure buttons are tap-friendly on mobile */
+  button, .button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Better text sizing on mobile */
+  h1 {
+    @apply text-3xl;
+  }
+  
+  h2 {
+    @apply text-2xl;
+  }
+  
+  /* Better card spacing on mobile */
+  .card {
+    @apply mx-2;
+  }
+}
+
+/* Ensure consistent form styling */
+input, textarea, select {
+  @apply transition-colors duration-200;
+}
+
+input:focus, textarea:focus, select:focus {
+  @apply ring-2 ring-teal-400/20;
+}
+
+/* Better hover states for interactive elements */
+.hover-lift {
+  @apply transition-transform duration-200 hover:scale-105;
+}
+
+.hover-glow {
+  @apply transition-shadow duration-200 hover:shadow-lg hover:shadow-teal-500/20;
 }
