@@ -8,6 +8,8 @@ import Index from "./pages/Index";
 import Tours from "./pages/Tours";
 import Plan from "./pages/Plan";
 import Itinerary from "./pages/Itinerary";
+import JapanItinerary from "./pages/JapanItinerary";
+import BaliItinerary from "./pages/BaliItinerary";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
@@ -25,6 +27,8 @@ const App = () => (
           <Route path="/tours" element={<Tours />} />
           <Route path="/plan" element={<Plan />} />
           <Route path="/itinerary/italy-7days" element={<Itinerary />} />
+          <Route path="/itinerary/japan-budget" element={<JapanItinerary />} />
+          <Route path="/itinerary/bali-family" element={<BaliItinerary />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="*" element={<NotFound />} />
