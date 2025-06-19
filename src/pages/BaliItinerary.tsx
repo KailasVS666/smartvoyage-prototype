@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Download, ArrowLeft, Clock, Camera, Utensils, Train, Plane } from "lucide-react";
@@ -46,7 +45,7 @@ const BaliItinerary = () => {
         { time: "9:00 AM", activity: "Snorkeling trip to Blue Lagoon", icon: Camera, type: "sightseeing" },
         { time: "12:00 PM", activity: "Beachside seafood lunch", icon: Utensils, type: "food" },
         { time: "3:00 PM", activity: "Kids' surf lessons", icon: Camera, type: "leisure" },
-        { time: "6:00 PM", activity: "Beach bonfire and BBQ dinner", ion: Utensils, type: "food" }
+        { time: "6:00 PM", activity: "Beach bonfire and BBQ dinner", icon: Utensils, type: "food" }
       ]
     },
     {
