@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,6 +12,7 @@ import BaliItinerary from "./pages/BaliItinerary";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
+import ItineraryGenerator from "./pages/ItineraryGenerator";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +31,7 @@ const App = () => (
           <Route path="/itinerary/bali-family" element={<BaliItinerary />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/itinerary-generator" element={<ItineraryGenerator />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

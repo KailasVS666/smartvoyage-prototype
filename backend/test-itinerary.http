@@ -1,0 +1,10 @@
+POST http://localhost:4000/itinerary
+Content-Type: application/json
+
+{
+  "destination": "Japan",
+  "duration": 5,
+  "budget": "moderate",
+  "travelType": "adventure",
+  "preferences": ["nature", "local food", "temples"]
+} 
