@@ -9,7 +9,7 @@ router.post("/", async (req: Request, res: Response) => {
   if (!destination || !days) {
     return res.status(400).json({ error: "'destination' and 'days' are required fields." });
   }
-  const prompt = `Generate a personalized travel itinerary for:\n\nDestination: ${destination}\n\nDuration: ${days} days\n\nBudget: ${budget || "Not specified"}\n\nType of Travel: ${travelType || "Not specified"}\n\nPreferences: ${preferences || "None"}\n\nMake it creative, practical, and well-structured by day.`;
+  const prompt = `Generate a personalized travel itinerary for:\n\nDestination: ${destination}\n\nDuration: ${days} days\n\nBudget: ${budget || "Not specified"}\n\nType of Travel: ${travelType || "Not specified"}\n\nPreferences: ${Array.isArray(preferences) ? preferences.join(", ") : (preferences || "None")}\n\nMake it creative, practical, and well-structured by day.`;
   try {
     const itinerary = await generateItinerary(prompt);
     res.json({ itinerary });
