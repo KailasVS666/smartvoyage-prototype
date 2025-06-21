@@ -42,7 +42,7 @@ const Navigation = () => {
           {/* Logo */}
           <div className="flex-shrink-0">
             <Link to="/">
-              <h1 className="text-2xl font-bold text-teal-400 glow-text">SmartVoyage</h1>
+              <img src="/SmartVoyage-logo.png" alt="SmartVoyage logo" className="h-10 w-10" />
             </Link>
           </div>
 

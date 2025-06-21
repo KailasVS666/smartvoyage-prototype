@@ -35,6 +35,7 @@ export interface TripData {
   itinerary: string | AIItinerary;
   createdAt: string;
   updatedAt: string;
+  groupId?: string; // Optional group link
 }
 
 export interface SaveTripData {
@@ -44,6 +45,7 @@ export interface SaveTripData {
   travelers: number;
   preferences: string[];
   itinerary: string | AIItinerary;
+  groupId?: string; // Optional group link
 }
 
 // Save a new trip to Firestore

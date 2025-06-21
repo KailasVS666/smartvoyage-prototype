@@ -45,4 +45,10 @@ export const db = getFirestore(app);
 // Google Auth Provider
 export const provider = new GoogleAuthProvider();
 
-export default app; 
+export default app;
+
+// Make auth available in the browser console for debugging
+if (typeof window !== "undefined") {
+  // @ts-ignore
+  window.auth = auth;
+} 
