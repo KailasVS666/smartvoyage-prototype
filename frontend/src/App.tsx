@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Tours from "./pages/Tours";
 import Plan from "./pages/Plan";
@@ -13,29 +14,35 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 import ItineraryGenerator from "./pages/ItineraryGenerator";
+import SharedTripPage from "./pages/SharedTripPage";
+import MyTrips from "./pages/MyTrips";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/tours" element={<Tours />} />
-          <Route path="/plan" element={<Plan />} />
-          <Route path="/itinerary/italy-7days" element={<Itinerary />} />
-          <Route path="/itinerary/japan-budget" element={<JapanItinerary />} />
-          <Route path="/itinerary/bali-family" element={<BaliItinerary />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/itinerary-generator" element={<ItineraryGenerator />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/tours" element={<Tours />} />
+            <Route path="/plan" element={<Plan />} />
+            <Route path="/itinerary/italy-7days" element={<Itinerary />} />
+            <Route path="/itinerary/japan-budget" element={<JapanItinerary />} />
+            <Route path="/itinerary/bali-family" element={<BaliItinerary />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/itinerary-generator" element={<ItineraryGenerator />} />
+            <Route path="/shared/:tripId" element={<SharedTripPage />} />
+            <Route path="/my-trips" element={<MyTrips />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

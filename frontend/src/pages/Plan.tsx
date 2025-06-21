@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -18,6 +17,7 @@ const Plan = () => {
     destination: "",
     duration: "",
     budget: "",
+    travelers: 1,
     travelType: [] as string[],
     preferences: [] as string[]
   });
@@ -51,7 +51,15 @@ const Plan = () => {
   };
 
   const handleGenerateItinerary = () => {
-    navigate("/itinerary/italy-7days");
+    const params = new URLSearchParams({
+      destination: formData.destination,
+      duration: formData.duration,
+      budget: formData.budget,
+      travelers: formData.travelers.toString(),
+      travelType: formData.travelType.join(','),
+      preferences: formData.preferences.join(',')
+    });
+    navigate(`/itinerary-generator?${params.toString()}`);
   };
 
   return (
@@ -119,6 +127,22 @@ const Plan = () => {
                       <SelectItem value="10days">10 Days</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Number of Travelers */}
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-gray-300 font-medium">
+                    <Users className="h-4 w-4 text-teal-400" />
+                    Number of Travelers
+                  </label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={formData.travelers}
+                    onChange={(e) => setFormData(prev => ({ ...prev, travelers: Math.max(1, parseInt(e.target.value) || 1) }))}
+                    placeholder="How many people are traveling?"
+                    className="bg-gray-800 text-white border-gray-700 focus:border-teal-400 h-12"
+                  />
                 </div>
 
                 {/* Budget */}

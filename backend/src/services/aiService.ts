@@ -1,32 +1,39 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import axios from "axios";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { Itinerary } from "../types/itinerary";
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-if (!GROQ_API_KEY) {
-  throw new Error("GROQ_API_KEY is missing in environment variables.");
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+if (!GEMINI_API_KEY) {
+  throw new Error("GEMINI_API_KEY is missing in environment variables.");
 }
+
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 export async function generateItinerary(prompt: string): Promise<string> {
   try {
-    const response = await axios.post(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        model: "meta-llama/llama-4-scout-17b-16e-instruct",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-    return response.data.choices[0].message.content;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = await response.text();
+    return text;
   } catch (error: any) {
-    console.error("Groq API error:", error.response?.data || error.message);
-    throw new Error("Failed to generate itinerary using Groq.");
+    console.error("Gemini API error:", error);
+    throw new Error("Failed to generate itinerary using Gemini.");
+  }
+}
+
+export async function getItineraryFromAI(prompt: string): Promise<{ itinerary?: Itinerary; error?: string }> {
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = await response.text();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON found in AI response.");
+    const itinerary: Itinerary = JSON.parse(jsonMatch[0]);
+    return { itinerary };
+  } catch (error: any) {
+    return { error: `Failed to parse AI response as JSON: ${error.message}` };
   }
 } 

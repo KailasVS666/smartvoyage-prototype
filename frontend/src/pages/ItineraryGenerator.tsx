@@ -1,5 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
+import { useReactToPrint } from 'react-to-print';
+import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from "@/contexts/AuthContext";
+import { saveTrip } from "@/services/tripService";
+import { Bookmark, BookmarkCheck } from "lucide-react";
 
 const BUDGET_OPTIONS = [
   { label: "Low", value: "Low" },
@@ -8,34 +14,135 @@ const BUDGET_OPTIONS = [
 ];
 
 const PREFERENCE_OPTIONS = [
-  "Romantic",
   "Adventure",
-  "Family",
+  "Food", 
+  "Nature",
   "Culture",
   "Relaxation",
 ];
+
+// 1. Define the AIItinerary type
+type AIItinerary = {
+  days: {
+    day: number;
+    summary: string;
+    activities: {
+      time: string;
+      title: string;
+      description: string;
+    }[];
+  }[];
+};
 
 /**
  * ItineraryGenerator
  * A simple form to collect travel preferences and display the AI-generated itinerary.
  */
 const ItineraryGenerator: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const { user, signInWithGoogle } = useAuth();
+  
+  // Helper function to map budget values from Plan page to ItineraryGenerator
+  const mapBudgetValue = (budgetParam: string | null) => {
+    switch (budgetParam) {
+      case "budget": return "Low";
+      case "midrange": return "Medium";
+      case "luxury": return "High";
+      default: return "Medium";
+    }
+  };
+  
   // Form state
-  const [destination, setDestination] = useState("");
-  const [duration, setDuration] = useState(5);
-  const [budget, setBudget] = useState("Medium");
-  const [preferences, setPreferences] = useState<string[]>([]);
+  const [destination, setDestination] = useState(searchParams.get("destination") || "");
+  const [duration, setDuration] = useState(parseInt(searchParams.get("duration") || "5"));
+  const [budget, setBudget] = useState(mapBudgetValue(searchParams.get("budget")));
+  const [travelers, setTravelers] = useState(parseInt(searchParams.get("travelers") || "1"));
+  const [preferences, setPreferences] = useState<string[]>(
+    searchParams.get("preferences") ? searchParams.get("preferences")!.split(",").filter(p => p) : []
+  );
 
   // UI state
   const [loading, setLoading] = useState(false);
-  const [itinerary, setItinerary] = useState<string | null>(null);
+  const [itinerary, setItinerary] = useState<AIItinerary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Toast
   const { toast } = useToast();
 
-  // Ref for auto-scroll
+  // Refs
   const itineraryRef = useRef<HTMLDivElement | null>(null);
+  const componentRef = useRef<HTMLDivElement | null>(null);
+
+  // Print handler
+  const handlePrint = useReactToPrint({
+    contentRef: componentRef,
+  });
+
+  const handlePrintClick = () => {
+    toast({ title: "Preparing PDF", description: "Getting your itinerary ready for export..." });
+    handlePrint();
+  };
+
+  // Share trip handler
+  const handleShareTrip = () => {
+    if (!itinerary) return;
+    const tripId = uuidv4();
+    const tripData = {
+      itinerary, // now an object
+      destination,
+      duration,
+      budget,
+      travelers,
+      preferences,
+      createdAt: new Date().toISOString()
+    };
+    localStorage.setItem(`trip_${tripId}`, JSON.stringify(tripData));
+    const shareUrl = `${window.location.origin}/shared/${tripId}`;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast({ 
+        title: "Link Copied!", 
+        description: "Share this link with friends to show them your itinerary!" 
+      });
+    }).catch(() => {
+      toast({ 
+        title: "Share Link", 
+        description: `Copy this link: ${shareUrl}`,
+        variant: "destructive"
+      });
+    });
+  };
+
+  // Save trip to Firestore
+  const handleSaveTrip = async () => {
+    if (!itinerary || !user) {
+      console.log("SaveTrip: missing itinerary or user", { itinerary, user });
+      return;
+    }
+    try {
+      const tripId = uuidv4();
+      const tripData = {
+        destination,
+        duration,
+        budget,
+        travelers,
+        preferences,
+        itinerary: JSON.stringify(itinerary), // Save as string
+      };
+      console.log("Saving trip:", { userId: user.uid, tripId, tripData });
+      await saveTrip(user.uid, tripId, tripData);
+      toast({
+        title: "Trip Saved!",
+        description: "Your itinerary has been saved to your account.",
+      });
+    } catch (error) {
+      console.error("SaveTrip error:", error);
+      toast({
+        title: "Save Failed",
+        description: "Failed to save your trip. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Handle preference selection (multi-select)
   const handlePreferenceChange = (pref: string) => {
@@ -61,22 +168,44 @@ const ItineraryGenerator: React.FC = () => {
     setError(null);
 
     // Basic validation
-    if (!destination.trim() || duration <= 0) {
-      setError("Please enter a valid destination and duration.");
-      toast({ title: "Error", description: "Please enter a valid destination and duration.", variant: "destructive" });
+    if (!destination.trim() || duration <= 0 || travelers < 1) {
+      setError("Please enter a valid destination, duration, and number of travelers.");
+      toast({ title: "Error", description: "Please enter a valid destination, duration, and number of travelers.", variant: "destructive" });
       setLoading(false);
       return;
     }
 
     try {
+      // Map frontend values to backend expected fields
+      const city = destination;
+      const days = duration;
+      const interests = preferences;
+      // Map budget to backend enum
+      let budgetLevel: 'low' | 'medium' | 'high' = 'medium';
+      if (budget === 'Low') budgetLevel = 'low';
+      else if (budget === 'Medium') budgetLevel = 'medium';
+      else if (budget === 'High') budgetLevel = 'high';
+      // Map travelStyle (try to get from searchParams, else default)
+      let travelStyle: 'slow' | 'fast-paced' | 'luxurious' | 'backpacking' = 'fast-paced';
+      const travelTypeParam = searchParams.get('travelType');
+      if (travelTypeParam) {
+        // Use the first selected travelType as a proxy for style
+        const type = travelTypeParam.split(',')[0]?.toLowerCase();
+        if (type === 'solo') travelStyle = 'backpacking';
+        else if (type === 'couple') travelStyle = 'luxurious';
+        else if (type === 'family') travelStyle = 'slow';
+        else if (type === 'group') travelStyle = 'fast-paced';
+      }
+
       const response = await fetch("http://localhost:5000/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          destination,
-          days: duration,
-          budget,
-          preferences,
+          city,
+          days,
+          interests,
+          budgetLevel,
+          travelStyle,
         }),
       });
 
@@ -95,47 +224,6 @@ const ItineraryGenerator: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Utility: Parse itinerary string into structured sections
-  const parseItinerary = (itinerary: string) => {
-    const lines = itinerary.split(/\r?\n/);
-    const days: { title: string; activities: string[] }[] = [];
-    const budgetSection: string[] = [];
-    const tipsSection: string[] = [];
-    let currentDay: { title: string; activities: string[] } | null = null;
-    let section: 'days' | 'budget' | 'tips' = 'days';
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      // Match "**Day 1: ...**" or "Day 1: ..." (with or without markdown)
-      if (/^(\*\*)?Day \d+:?/i.test(line)) {
-        if (currentDay) days.push(currentDay);
-        // Remove markdown and keep the title
-        const title = line.replace(/^\*\*|\*\*$/g, '').replace(/^\*+/, '').trim();
-        currentDay = { title, activities: [] };
-        section = 'days';
-      } else if (/Budget Breakdown/i.test(line)) {
-        if (currentDay) days.push(currentDay);
-        currentDay = null;
-        section = 'budget';
-      } else if (/Tips/i.test(line)) {
-        if (currentDay) days.push(currentDay);
-        currentDay = null;
-        section = 'tips';
-      } else if (line) {
-        if (section === 'days' && currentDay) {
-          // Remove markdown bullets and asterisks
-          currentDay.activities.push(line.replace(/^\*+\s*/, '').replace(/^[-•]\s*/, ''));
-        } else if (section === 'budget') {
-          budgetSection.push(line.replace(/^\*+\s*/, '').replace(/^[-•]\s*/, ''));
-        } else if (section === 'tips') {
-          tipsSection.push(line.replace(/^\*+\s*/, '').replace(/^[-•]\s*/, ''));
-        }
-      }
-    }
-    if (currentDay) days.push(currentDay);
-    return { days, budgetSection, tipsSection };
   };
 
   // Icon mapping for activity keywords
@@ -183,6 +271,20 @@ const ItineraryGenerator: React.FC = () => {
             required
             className="w-full border rounded px-3 py-2"
             placeholder="e.g. 5"
+          />
+        </div>
+        {/* Number of Travelers */}
+        <div>
+          <label className="block font-medium mb-1" htmlFor="travelers">Number of Travelers</label>
+          <input
+            id="travelers"
+            type="number"
+            min={1}
+            value={travelers}
+            onChange={(e) => setTravelers(Math.max(1, parseInt(e.target.value) || 1))}
+            required
+            className="w-full border rounded px-3 py-2"
+            placeholder="e.g. 2"
           />
         </div>
         {/* Budget */}
@@ -251,57 +353,85 @@ const ItineraryGenerator: React.FC = () => {
       )}
 
       {/* Itinerary Result */}
-      {itinerary && (() => {
-        const { days, budgetSection, tipsSection } = parseItinerary(itinerary);
-        return (
-          <div ref={itineraryRef} className="mt-6 space-y-6">
-            <h3 className="text-lg font-bold mb-4">Your Itinerary</h3>
+      {itinerary && (
+        <div ref={itineraryRef} className="mt-6 space-y-6">
+          <h3 className="text-lg font-bold mb-4">Your Itinerary</h3>
+          {/* Printable Content */}
+          <div ref={componentRef} className="bg-white text-black p-6 rounded-lg shadow-md print:p-0 print:shadow-none">
+            {/* Header for PDF */}
+            <div className="text-center mb-6 print:mb-4">
+              <h2 className="text-2xl font-bold text-gray-800 mb-2 print:text-xl">SmartVoyage Itinerary</h2>
+              <p className="text-gray-600 print:text-sm">{destination} • {duration} Days • {travelers} {travelers === 1 ? 'Traveler' : 'Travelers'}</p>
+              <p className="text-gray-600 print:text-sm">Budget: {budget} • Generated on {new Date().toLocaleDateString()}</p>
+            </div>
             {/* Days */}
             <div className="space-y-4">
-              {days.map((day, idx) => (
+              {itinerary.days.map((day, idx) => (
                 <div
-                  key={day.title}
-                  className="bg-white rounded-lg shadow border border-gray-200 p-4 md:p-6"
+                  key={day.day}
+                  className="border border-gray-200 rounded-lg p-4"
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-teal-500 font-bold text-base md:text-lg">{day.title}</span>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-teal-600 font-bold text-lg">Day {day.day}: {day.summary}</span>
                   </div>
                   <ul className="list-none pl-0 space-y-2">
                     {day.activities.map((act, i) => (
                       <li key={i} className="flex items-start gap-2 text-gray-800">
-                        <span className="text-xl leading-5 select-none">{activityIcon(act)}</span>
-                        <span>{act}</span>
+                        <span className="font-bold">{act.time}</span>
+                        <span className="font-semibold">{act.title}</span>: {act.description}
                       </li>
                     ))}
                   </ul>
                 </div>
               ))}
             </div>
-            {/* Budget Breakdown */}
-            {budgetSection.length > 0 && (
-              <div className="bg-teal-50 border border-teal-200 rounded-lg shadow p-4 md:p-6">
-                <h4 className="text-teal-700 font-semibold mb-2">Budget Breakdown</h4>
-                <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                  {budgetSection.map((line, i) => (
-                    <li key={i}>{line}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {/* Tips */}
-            {tipsSection.length > 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg shadow p-4 md:p-6">
-                <h4 className="text-yellow-700 font-semibold mb-2">Tips</h4>
-                <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                  {tipsSection.map((line, i) => (
-                    <li key={i}>{line}</li>
-                  ))}
-                </ul>
+            {/* Footer for PDF */}
+            <div className="mt-8 pt-4 border-t border-gray-200 text-center text-gray-600">
+              <p>Generated by SmartVoyage AI • Your AI-powered travel companion</p>
+              <p className="text-sm mt-1">Visit smartvoyage.com for more travel inspiration</p>
+            </div>
+          </div>
+          {/* Export and Share Buttons */}
+          <div className="text-center print:hidden space-y-3">
+            <div className="flex gap-3 justify-center flex-wrap">
+              <button 
+                onClick={handlePrintClick}
+                className="px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-semibold shadow-lg"
+              >
+                🖨️ Export Itinerary as PDF
+              </button>
+              <button 
+                onClick={handleShareTrip}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-lg"
+              >
+                📤 Share Trip
+              </button>
+              {user && (
+                <button 
+                  onClick={handleSaveTrip}
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-lg flex items-center"
+                >
+                  <Bookmark className="h-4 w-4 mr-2" />
+                  Save Trip
+                </button>
+              )}
+            </div>
+            {!user && (
+              <div className="text-center">
+                <p className="text-sm text-gray-600 mb-2">
+                  Sign in to save your trips to your account
+                </p>
+                <button 
+                  onClick={signInWithGoogle}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
+                >
+                  🔐 Sign in with Google
+                </button>
               </div>
             )}
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 };

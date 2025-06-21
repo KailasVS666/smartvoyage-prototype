@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { Menu, X, User, LogOut } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import LoginButton from "./LoginButton";
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const navLinks = [
     { name: "Home", href: "/" },
@@ -16,7 +19,21 @@ const Navigation = () => {
     { name: "Contact", href: "/contact" },
   ];
 
+  // Add My Trips link if user is authenticated
+  if (user) {
+    navLinks.splice(4, 0, { name: "My Trips", href: "/my-trips" });
+  }
+
   const isActive = (href: string) => location.pathname === href;
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setIsOpen(false);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-sm border-b border-gray-800">
@@ -46,11 +63,31 @@ const Navigation = () => {
                 </Link>
               ))}
             </div>
-            <Link to="/plan">
-              <Button className="bg-teal-500 hover:bg-teal-400 text-black font-semibold">
-                Plan Trip
-              </Button>
-            </Link>
+            <div className="flex items-center space-x-4">
+              {user ? (
+                <>
+                  <span className="text-sm text-gray-300">
+                    Hi, {user.displayName || user.email?.split('@')[0]}
+                  </span>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleLogout}
+                    className="border-gray-600 text-gray-300 hover:border-teal-400 hover:text-teal-400"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </Button>
+                </>
+              ) : (
+                <LoginButton />
+              )}
+              <Link to="/plan">
+                <Button className="bg-teal-500 hover:bg-teal-400 text-black font-semibold">
+                  Plan Trip
+                </Button>
+              </Link>
+            </div>
           </div>
 
           {/* Mobile menu button */}
@@ -85,7 +122,27 @@ const Navigation = () => {
                 {link.name}
               </Link>
             ))}
-            <div className="px-3 py-2">
+            <div className="px-3 py-2 space-y-2">
+              {user ? (
+                <>
+                  <div className="text-sm text-gray-400 px-3 py-1">
+                    Hi, {user.displayName || user.email?.split('@')[0]}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleLogout}
+                    className="w-full border-gray-600 text-gray-300 hover:border-teal-400 hover:text-teal-400"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </Button>
+                </>
+              ) : (
+                <div className="px-3">
+                  <LoginButton />
+                </div>
+              )}
               <Link to="/plan" onClick={() => setIsOpen(false)}>
                 <Button className="w-full bg-teal-500 hover:bg-teal-400 text-black font-semibold">
                   Plan Trip
