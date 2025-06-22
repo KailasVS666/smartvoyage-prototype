@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { onSnapshot, collection, query as fsQuery, where, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const MyTrips: React.FC = () => {
   const { user, logout } = useAuth();
@@ -26,6 +28,37 @@ const MyTrips: React.FC = () => {
     if (user) {
       loadUserTrips();
     }
+  }, [user]);
+
+  // Real-time collaborative editing support for trip list
+  useEffect(() => {
+    let isInitial = true;
+    if (!user) return;
+    const tripsQuery = fsQuery(
+      collection(db, 'trips'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubscribe = onSnapshot(tripsQuery, (querySnapshot) => {
+      const trips: TripData[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (typeof data.tripData === 'string') {
+          try {
+            const parsed = JSON.parse(data.tripData) as TripData;
+            trips.push({ ...parsed, tripId: data.tripId, userId: data.userId });
+          } catch (e) {
+            // fallback: skip or handle error
+          }
+        }
+      });
+      setTrips(trips);
+      if (!isInitial) {
+        toast({ title: 'Trips updated', description: 'Your trips list was updated.' });
+      }
+      isInitial = false;
+    });
+    return () => unsubscribe();
   }, [user]);
 
   const loadUserTrips = async () => {
@@ -196,7 +229,7 @@ const MyTrips: React.FC = () => {
                       </div>
                     )}
                     <Link 
-                      to={`/shared/${trip.tripId}`}
+                      to={`/itinerary-generator?tripId=${trip.tripId}${trip.groupId ? `&groupId=${trip.groupId}` : ''}`}
                       className="flex-1"
                     >
                       <Button 

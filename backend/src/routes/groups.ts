@@ -36,13 +36,14 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
       return res.status(404).json({ error: `User(s) not found: ${notFound.map((m) => m.email).join(', ')}` });
     }
 
-    // 2. Build members array: creator is admin, others are editors
+    // 2. Build members array: creator is admin, others are editors (viewers can be added in the future)
     const creatorUid = req.user!.uid;
     const members: GroupMember[] = [
       { uid: creatorUid, role: 'admin' },
       ...memberLookups
         .filter((m) => m.uid && m.uid !== creatorUid)
         .map((m) => ({ uid: m.uid!, role: 'editor' as const })),
+      // To add a viewer in the future: { uid: someUid, role: 'viewer' as const }
     ];
 
     // 3. Create group doc in Firestore

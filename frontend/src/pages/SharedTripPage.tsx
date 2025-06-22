@@ -5,6 +5,8 @@ import { useReactToPrint } from 'react-to-print';
 import { ArrowLeft, Calendar, MapPin, Users, DollarSign, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getTripById, AIItinerary } from "@/services/tripService";
+import { onSnapshot, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface TripData {
   itinerary: string;
@@ -74,6 +76,29 @@ const SharedTripPage: React.FC = () => {
     };
 
     loadTrip();
+  }, [tripId]);
+
+  // Real-time collaborative editing support
+  useEffect(() => {
+    let isInitial = true;
+    if (!tripId) return;
+    const tripDocRef = doc(db, 'trips', tripId);
+    const unsubscribe = onSnapshot(tripDocRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (typeof data.tripData === 'string') {
+          try {
+            const parsed = JSON.parse(data.tripData);
+            setTripData(parsed);
+            if (!isInitial) {
+              toast({ title: 'Trip updated', description: 'This trip was updated by another group member.' });
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+      isInitial = false;
+    });
+    return () => unsubscribe();
   }, [tripId]);
 
   // Utility: Parse itinerary string into structured sections

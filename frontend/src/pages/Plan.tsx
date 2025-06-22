@@ -10,6 +10,10 @@ import { MapPin, Calendar, DollarSign, Users, Heart, Sparkles } from "lucide-rea
 import Navigation from "../components/Navigation";
 import Footer from "../components/Footer";
 import ScrollToTop from "../components/ScrollToTop";
+import { useAuth } from "@/contexts/AuthContext";
+import { createGroup, saveTrip } from "@/services/tripService";
+import { useToast } from "@/hooks/use-toast";
+import { v4 as uuidv4 } from 'uuid';
 
 const Plan = () => {
   const navigate = useNavigate();
@@ -21,6 +25,12 @@ const Plan = () => {
     travelType: [] as string[],
     preferences: [] as string[]
   });
+  const [isGroupTrip, setIsGroupTrip] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [inviteEmails, setInviteEmails] = useState("");
+  const [groupLoading, setGroupLoading] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   const handleTravelTypeChange = (type: string, checked: boolean) => {
     if (checked) {
@@ -50,14 +60,59 @@ const Plan = () => {
     }
   };
 
-  const handleGenerateItinerary = () => {
+  const handleGenerateItinerary = async () => {
+    let groupId: string | undefined = undefined;
+    let tripId: string | undefined = undefined;
+    if (isGroupTrip) {
+      // Validate group name and emails
+      if (!groupName.trim()) {
+        toast({ title: "Group name required", description: "Please enter a group name.", variant: "destructive" });
+        return;
+      }
+      const emails = inviteEmails.split(",").map(e => e.trim()).filter(Boolean);
+      if (emails.length === 0) {
+        toast({ title: "Invite emails required", description: "Please enter at least one email.", variant: "destructive" });
+        return;
+      }
+      if (!user) {
+        toast({ title: "Sign in required", description: "Sign in to create a group trip.", variant: "destructive" });
+        return;
+      }
+      setGroupLoading(true);
+      try {
+        const idToken = await user.getIdToken();
+        const res = await createGroup(groupName, emails, null, idToken);
+        groupId = res.groupId;
+        // Immediately create a trip document for the group
+        tripId = uuidv4();
+        await saveTrip(user.uid, tripId, {
+          destination: formData.destination,
+          duration: typeof formData.duration === 'string' ? parseInt(formData.duration) : formData.duration,
+          budget: formData.budget,
+          travelers: formData.travelers,
+          preferences: formData.preferences,
+          itinerary: '', // No itinerary yet
+          groupId,
+        });
+        toast({ title: "Group created!", description: "Your group and trip were created successfully." });
+      } catch (err: unknown) {
+        let message = "Could not create group.";
+        if (err instanceof Error) message = err.message;
+        toast({ title: "Group creation failed", description: message, variant: "destructive" });
+        setGroupLoading(false);
+        return;
+      }
+      setGroupLoading(false);
+    }
     const params = new URLSearchParams({
       destination: formData.destination,
       duration: formData.duration,
       budget: formData.budget,
       travelers: formData.travelers.toString(),
       travelType: formData.travelType.join(','),
-      preferences: formData.preferences.join(',')
+      preferences: formData.preferences.join(','),
+      ...(groupId ? { groupId } : {}),
+      ...(tripId ? { tripId } : {}),
     });
     navigate(`/itinerary-generator?${params.toString()}`);
   };
@@ -216,6 +271,50 @@ const Plan = () => {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* Group Trip Checkbox and Fields */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="group-trip"
+                      checked={isGroupTrip}
+                      onCheckedChange={checked => setIsGroupTrip(!!checked)}
+                      className="border-teal-400 data-[state=checked]:bg-teal-400 data-[state=checked]:border-teal-400"
+                    />
+                    <label htmlFor="group-trip" className="text-white text-sm cursor-pointer font-medium">
+                      This is a group trip
+                    </label>
+                  </div>
+                  {isGroupTrip && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-gray-300 font-medium" htmlFor="group-name">Group Name</label>
+                        <Input
+                          id="group-name"
+                          type="text"
+                          value={groupName}
+                          onChange={e => setGroupName(e.target.value)}
+                          placeholder="e.g. Friends Bali 2024"
+                          className="bg-gray-800 text-white border-gray-700 focus:border-teal-400 h-12"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-gray-300 font-medium" htmlFor="invite-emails">Invite Emails</label>
+                        <Input
+                          id="invite-emails"
+                          type="text"
+                          value={inviteEmails}
+                          onChange={e => setInviteEmails(e.target.value)}
+                          placeholder="Comma-separated emails"
+                          className="bg-gray-800 text-white border-gray-700 focus:border-teal-400 h-12"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {groupLoading && (
+                    <div className="text-teal-400 text-sm pt-2">Creating group...</div>
+                  )}
                 </div>
 
                 {/* Generate Button */}

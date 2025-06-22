@@ -48,6 +48,16 @@ export interface SaveTripData {
   groupId?: string; // Optional group link
 }
 
+// Expense type for group expense splitter
+export interface Expense {
+  id: string;
+  title: string;
+  amount: number;
+  paidBy: string;
+  splitBetween: string[];
+  timestamp: number;
+}
+
 // Save a new trip to Firestore
 export const saveTrip = async (userId: string, tripId: string, tripData: SaveTripData): Promise<void> => {
   try {
@@ -131,5 +141,144 @@ export const deleteTrip = async (tripId: string): Promise<void> => {
   } catch (error) {
     console.error('Error deleting trip:', error);
     throw new Error('Failed to delete trip');
+  }
+};
+
+// Create a group via backend API
+export const createGroup = async (
+  name: string,
+  memberEmails: string[],
+  tripId: string | null,
+  idToken: string
+): Promise<{ groupId: string }> => {
+  try {
+    const response = await fetch("http://localhost:5000/groups/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ name, memberEmails, tripId }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to create group");
+    }
+    return { groupId: data.groupId };
+  } catch (error: unknown) {
+    console.error("Error creating group:", error);
+    let message = "Failed to create group";
+    if (error instanceof Error) {
+      message = error.message;
+    }
+    throw new Error(message);
+  }
+};
+
+// Update an existing trip in Firestore
+export const updateTrip = async (userId: string, tripId: string, tripData: SaveTripData): Promise<void> => {
+  try {
+    const tripDoc = {
+      tripId,
+      userId,
+      tripData: JSON.stringify({
+        ...tripData,
+        updatedAt: new Date().toISOString(),
+      }),
+      updatedAt: new Date().toISOString(),
+    };
+    await setDoc(doc(db, 'trips', tripId), tripDoc, { merge: true });
+  } catch (error) {
+    console.error('Error updating trip:', error);
+    throw new Error('Failed to update trip');
+  }
+};
+
+// Add an expense to a trip's expenses array
+export const addExpenseToTrip = async (tripId: string, expense: Expense): Promise<void> => {
+  try {
+    const tripRef = doc(db, 'trips', tripId);
+    const tripSnap = await getDoc(tripRef);
+    let expenses: Expense[] = [];
+    if (tripSnap.exists()) {
+      const data = tripSnap.data();
+      if (Array.isArray(data.expenses)) {
+        expenses = data.expenses;
+      }
+    }
+    expenses.push(expense);
+    await setDoc(tripRef, { expenses }, { merge: true });
+  } catch (error) {
+    console.error('Error adding expense:', error);
+    throw new Error('Failed to add expense');
+  }
+};
+
+// Update an expense in a trip's expenses array
+export const updateExpenseInTrip = async (tripId: string, updatedExpense: Expense): Promise<void> => {
+  try {
+    const tripRef = doc(db, 'trips', tripId);
+    const tripSnap = await getDoc(tripRef);
+    let expenses: Expense[] = [];
+    if (tripSnap.exists()) {
+      const data = tripSnap.data();
+      if (Array.isArray(data.expenses)) {
+        expenses = data.expenses;
+      }
+    }
+    expenses = expenses.map(exp => exp.id === updatedExpense.id ? updatedExpense : exp);
+    await setDoc(tripRef, { expenses }, { merge: true });
+  } catch (error) {
+    console.error('Error updating expense:', error);
+    throw new Error('Failed to update expense');
+  }
+};
+
+// Delete an expense from a trip's expenses array
+export const deleteExpenseFromTrip = async (tripId: string, expenseId: string): Promise<void> => {
+  try {
+    const tripRef = doc(db, 'trips', tripId);
+    const tripSnap = await getDoc(tripRef);
+    let expenses: Expense[] = [];
+    if (tripSnap.exists()) {
+      const data = tripSnap.data();
+      if (Array.isArray(data.expenses)) {
+        expenses = data.expenses;
+      }
+    }
+    expenses = expenses.filter(exp => exp.id !== expenseId);
+    await setDoc(tripRef, { expenses }, { merge: true });
+  } catch (error) {
+    console.error('Error deleting expense:', error);
+    throw new Error('Failed to delete expense');
+  }
+};
+
+export type GroupRole = 'admin' | 'editor' | 'viewer';
+
+export interface GroupMember {
+  uid: string;
+  role: GroupRole;
+}
+
+export interface Group {
+  groupId: string;
+  name: string;
+  createdBy: string;
+  members: GroupMember[];
+  tripId?: string;
+}
+
+// Fetch a group by groupId
+export const getGroupById = async (groupId: string): Promise<Group | null> => {
+  try {
+    const groupDoc = await getDoc(doc(db, 'groups', groupId));
+    if (groupDoc.exists()) {
+      return groupDoc.data() as Group;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting group:', error);
+    throw new Error('Failed to get group');
   }
 }; 

@@ -1,6 +1,6 @@
 export interface GroupMember {
   uid: string;
-  role: 'admin' | 'editor';
+  role: 'admin' | 'editor' | 'viewer';
 }
 
 export interface Group {
