@@ -69,3 +69,9 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain]()
+
+
+## ⚠️ API Key Disclosure Notice
+
+This API key is shared intentionally for demo use only and is safely restricted to prevent unauthorized use.  
+Please do not use it outside the scope of this project. Abuse may lead to key revocation.
