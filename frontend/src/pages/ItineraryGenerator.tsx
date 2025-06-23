@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { useReactToPrint } from 'react-to-print';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from "@/contexts/AuthContext";
-import { saveTrip, updateTrip, getTripById, Expense, addExpenseToTrip, getGroupById, Group, GroupMember, updateExpenseInTrip, deleteExpenseFromTrip, GroupRole, generatePackingList } from "@/services/tripService";
+import { saveTrip, updateTrip, getTripById, Expense, addExpenseToTrip, getGroupById, Group, GroupMember, updateExpenseInTrip, deleteExpenseFromTrip, GroupRole, generatePackingList, listenToTripComments, addTripComment, TripComment } from "@/services/tripService";
 import { Bookmark, BookmarkCheck, Pencil, Trash2, Clipboard, Package } from "lucide-react";
 import { onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -601,6 +601,48 @@ const ItineraryGenerator: React.FC = () => {
 
   const canEdit = userRole === 'admin' || userRole === 'editor' || (user && user.uid === tripOwnerId);
 
+  // Comments state
+  const [comments, setComments] = useState<TripComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
+
+  // Listen for comments in real time
+  useEffect(() => {
+    if (!tripId) return;
+    setCommentsLoading(true);
+    const unsubscribe = listenToTripComments(tripId, (comments) => {
+      setComments(comments);
+      setCommentsLoading(false);
+    });
+    return () => unsubscribe();
+  }, [tripId]);
+
+  // Post a new comment
+  const handlePostComment = async () => {
+    if (!user || !tripId || !newComment.trim()) return;
+    setPostingComment(true);
+    try {
+      await addTripComment(tripId, newComment.trim(), user.uid, user.displayName || user.email || 'Unknown');
+      setNewComment('');
+      toast({ title: 'Comment posted!' });
+    } catch (err) {
+      toast({ title: 'Failed to post comment', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
+  // Helper: time ago
+  const timeAgo = (timestamp: number) => {
+    const now = Date.now();
+    const diff = Math.floor((now - timestamp) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+    return `${Math.floor(diff/86400)}d ago`;
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
@@ -1067,6 +1109,53 @@ const ItineraryGenerator: React.FC = () => {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          </div>
+        )}
+        {tripId && (
+          <div className="max-w-xl mx-auto mt-10 mb-16">
+            <h3 className="text-lg font-bold mb-2">Comments</h3>
+            <div className="bg-white rounded shadow p-4 max-h-64 overflow-y-auto mb-4 border border-gray-100">
+              {commentsLoading ? (
+                <div className="text-gray-500 text-center">Loading comments...</div>
+              ) : comments.length === 0 ? (
+                <div className="text-gray-400 text-center">No comments yet. Be the first to comment!</div>
+              ) : (
+                <ul className="space-y-3">
+                  {comments.map(c => (
+                    <li key={c.id} className="flex items-start gap-3">
+                      <div className="flex-shrink-0 w-9 h-9 rounded-full bg-teal-100 flex items-center justify-center font-bold text-teal-700 uppercase">
+                        {c.authorName?.[0] || '?'}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-gray-800">{c.authorName}</span>
+                          <span className="text-xs text-gray-400">{timeAgo(c.timestamp)}</span>
+                        </div>
+                        <div className="text-gray-700 text-sm whitespace-pre-line">{c.text}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="flex gap-2 items-end">
+              <textarea
+                className="flex-1 border rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-400"
+                rows={2}
+                placeholder="Write a comment..."
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                disabled={postingComment}
+                maxLength={500}
+              />
+              <Button
+                onClick={handlePostComment}
+                disabled={postingComment || !newComment.trim()}
+                className="h-10 px-5 bg-teal-600 text-white rounded-lg font-semibold"
+              >
+                {postingComment ? 'Posting...' : 'Post'}
+              </Button>
+            </div>
           </div>
         )}
       </div>

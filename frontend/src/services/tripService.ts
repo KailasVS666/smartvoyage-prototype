@@ -7,7 +7,10 @@ import {
   where, 
   orderBy,
   deleteDoc,
-  getDoc
+  getDoc,
+  addDoc,
+  onSnapshot,
+  Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -305,4 +308,52 @@ export const generatePackingList = async (
     const message = error instanceof Error ? error.message : "An unknown error occurred";
     return { error: message };
   }
+};
+
+export interface TripComment {
+  id: string;
+  text: string;
+  authorId: string;
+  authorName: string;
+  timestamp: number;
+}
+
+// Listen to comments in real time
+export const listenToTripComments = (
+  tripId: string,
+  callback: (comments: TripComment[]) => void
+): (() => void) => {
+  const commentsRef = collection(db, 'trips', tripId, 'comments');
+  const q = query(commentsRef, orderBy('timestamp', 'asc'));
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const comments: TripComment[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      comments.push({
+        id: docSnap.id,
+        text: data.text,
+        authorId: data.authorId,
+        authorName: data.authorName,
+        timestamp: data.timestamp,
+      });
+    });
+    callback(comments);
+  });
+  return unsubscribe;
+};
+
+// Add a new comment to a trip
+export const addTripComment = async (
+  tripId: string,
+  text: string,
+  authorId: string,
+  authorName: string
+): Promise<void> => {
+  const commentsRef = collection(db, 'trips', tripId, 'comments');
+  await addDoc(commentsRef, {
+    text,
+    authorId,
+    authorName,
+    timestamp: Date.now(),
+  });
 }; 
