@@ -281,4 +281,28 @@ export const getGroupById = async (groupId: string): Promise<Group | null> => {
     console.error('Error getting group:', error);
     throw new Error('Failed to get group');
   }
+};
+
+export const generatePackingList = async (
+  destination: string,
+  duration: number,
+  activities: string[],
+  travelers: number
+): Promise<{ packingList?: string; error?: string }> => {
+  try {
+    const response = await fetch("http://localhost:5000/itinerary/packing-list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ destination, duration, activities, travelers }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to generate packing list");
+    }
+    return data;
+  } catch (error: unknown) {
+    console.error('Error generating packing list:', error);
+    const message = error instanceof Error ? error.message : "An unknown error occurred";
+    return { error: message };
+  }
 }; 

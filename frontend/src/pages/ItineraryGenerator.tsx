@@ -4,8 +4,8 @@ import { useSearchParams } from "react-router-dom";
 import { useReactToPrint } from 'react-to-print';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from "@/contexts/AuthContext";
-import { saveTrip, updateTrip, getTripById, Expense, addExpenseToTrip, getGroupById, Group, GroupMember, updateExpenseInTrip, deleteExpenseFromTrip, GroupRole } from "@/services/tripService";
-import { Bookmark, BookmarkCheck, Pencil, Trash2 } from "lucide-react";
+import { saveTrip, updateTrip, getTripById, Expense, addExpenseToTrip, getGroupById, Group, GroupMember, updateExpenseInTrip, deleteExpenseFromTrip, GroupRole, generatePackingList } from "@/services/tripService";
+import { Bookmark, BookmarkCheck, Pencil, Trash2, Clipboard, Package } from "lucide-react";
 import { onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
 import { Badge } from '@/components/ui/badge';
+import html2pdf from 'html2pdf.js';
 
 const BUDGET_OPTIONS = [
   { label: "Low", value: "Low" },
@@ -83,11 +84,26 @@ const ItineraryGenerator: React.FC = () => {
   // Refs
   const itineraryRef = useRef<HTMLDivElement | null>(null);
   const componentRef = useRef<HTMLDivElement | null>(null);
+  const pdfContentRef = useRef<HTMLDivElement | null>(null);
 
   // Print handler
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
   });
+
+  const handleExportPdf = () => {
+    const element = pdfContentRef.current;
+    if (element) {
+      const opt = {
+        margin:       0.5,
+        filename:     `${destination}-itinerary.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2 },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+      html2pdf().from(element).set(opt).save();
+    }
+  };
 
   const handlePrintClick = () => {
     toast({ title: "Preparing PDF", description: "Getting your itinerary ready for export..." });
@@ -400,6 +416,12 @@ const ItineraryGenerator: React.FC = () => {
   const [userInfoMap, setUserInfoMap] = useState<Record<string, { displayName: string; email: string }>>({});
   const [groupLoading, setGroupLoading] = useState(false);
 
+  // Packing list state
+  const [packingListModalOpen, setPackingListModalOpen] = useState(false);
+  const [packingListLoading, setPackingListLoading] = useState(false);
+  const [packingListContent, setPackingListContent] = useState('');
+  const [packingListError, setPackingListError] = useState<string | null>(null);
+
   // Fetch group members and user info if groupId
   useEffect(() => {
     const groupId = searchParams.get('groupId');
@@ -527,6 +549,43 @@ const ItineraryGenerator: React.FC = () => {
     } finally {
       setDeleteLoading(false);
     }
+  };
+
+  // Generate packing list handler
+  const handleGeneratePackingList = async () => {
+    if (!destination || !duration || !travelers) {
+      toast({ title: "Missing Details", description: "Please ensure destination, duration, and travelers are set.", variant: "destructive" });
+      return;
+    }
+    setPackingListModalOpen(true);
+    setPackingListLoading(true);
+    setPackingListError(null);
+    setPackingListContent('');
+    
+    try {
+      const result = await generatePackingList(destination, duration, preferences, travelers);
+      if (result.error || !result.packingList) {
+        throw new Error(result.error || "Failed to generate packing list.");
+      }
+      setPackingListContent(result.packingList);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unknown error occurred.";
+      setPackingListError(message);
+      toast({ title: 'Generation Failed', description: message, variant: 'destructive' });
+    } finally {
+      setPackingListLoading(false);
+    }
+  };
+
+  // Copy packing list to clipboard
+  const handleCopyToClipboard = () => {
+    // A quick way to strip markdown for plain text copy
+    const plainText = packingListContent.replace(/###\s/g, '\n').replace(/-\s/g, '- ');
+    navigator.clipboard.writeText(plainText).then(() => {
+      toast({ title: 'Copied!', description: 'Packing list copied to clipboard.' });
+    }).catch(() => {
+      toast({ title: 'Copy Failed', description: 'Could not copy to clipboard.', variant: 'destructive' });
+    });
   };
 
   // Determine current user's group role
@@ -659,51 +718,59 @@ const ItineraryGenerator: React.FC = () => {
           <div ref={itineraryRef} className="mt-6 space-y-6">
             <h3 className="text-lg font-bold mb-4">Your Itinerary</h3>
             {/* Printable Content */}
-            <div ref={componentRef} className="bg-white text-black p-6 rounded-lg shadow-md print:p-0 print:shadow-none">
-              {/* Header for PDF */}
-              <div className="text-center mb-6 print:mb-4">
-                <h2 className="text-2xl font-bold text-gray-800 mb-2 print:text-xl">SmartVoyage Itinerary</h2>
-                <p className="text-gray-600 print:text-sm">{destination} • {duration} Days • {travelers} {travelers === 1 ? 'Traveler' : 'Travelers'}</p>
-                <p className="text-gray-600 print:text-sm">Budget: {budget} • Generated on {new Date().toLocaleDateString()}</p>
-              </div>
-              {/* Days */}
-              <div className="space-y-4">
-                {Array.isArray(itinerary?.days) && itinerary.days.length > 0 ? (
-                  itinerary.days.map((day, idx) => (
-                    <div
-                      key={day.day}
-                      className="border border-gray-200 rounded-lg p-4"
-                    >
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-teal-600 font-bold text-lg">Day {day.day}: {day.summary}</span>
+            <div ref={pdfContentRef}>
+              <div ref={componentRef} className="bg-white text-black p-6 rounded-lg shadow-md print:p-0 print:shadow-none">
+                {/* Header for PDF */}
+                <div className="text-center mb-6 print:mb-4">
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2 print:text-xl">SmartVoyage Itinerary</h2>
+                  <p className="text-gray-600 print:text-sm">{destination} • {duration} Days • {travelers} {travelers === 1 ? 'Traveler' : 'Travelers'}</p>
+                  <p className="text-gray-600 print:text-sm">Budget: {budget} • Generated on {new Date().toLocaleDateString()}</p>
+                </div>
+                {/* Days */}
+                <div className="space-y-4">
+                  {Array.isArray(itinerary?.days) && itinerary.days.length > 0 ? (
+                    itinerary.days.map((day, idx) => (
+                      <div
+                        key={day.day}
+                        className="border border-gray-200 rounded-lg p-4"
+                      >
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-teal-600 font-bold text-lg">Day {day.day}: {day.summary}</span>
+                        </div>
+                        <ul className="list-none pl-0 space-y-2">
+                          {Array.isArray(day.activities) && day.activities.length > 0 ? (
+                            day.activities.map((act, i) => (
+                              <li key={i} className="flex items-start gap-2 text-gray-800">
+                                <span className="font-bold">{act.time}</span>
+                                <span className="font-semibold">{act.title}</span>: {act.description}
+                              </li>
+                            ))
+                          ) : (
+                            <li className="text-gray-500">No activities for this day.</li>
+                          )}
+                        </ul>
                       </div>
-                      <ul className="list-none pl-0 space-y-2">
-                        {Array.isArray(day.activities) && day.activities.length > 0 ? (
-                          day.activities.map((act, i) => (
-                            <li key={i} className="flex items-start gap-2 text-gray-800">
-                              <span className="font-bold">{act.time}</span>
-                              <span className="font-semibold">{act.title}</span>: {act.description}
-                            </li>
-                          ))
-                        ) : (
-                          <li className="text-gray-500">No activities for this day.</li>
-                        )}
-                      </ul>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-gray-500">No itinerary days found.</div>
-                )}
-              </div>
-              {/* Footer for PDF */}
-              <div className="mt-8 pt-4 border-t border-gray-200 text-center text-gray-600">
-                <p>Generated by SmartVoyage AI • Your AI-powered travel companion</p>
-                <p className="text-sm mt-1">Visit smartvoyage.com for more travel inspiration</p>
+                    ))
+                  ) : (
+                    <div className="text-gray-500">No itinerary days found.</div>
+                  )}
+                </div>
+                {/* Footer for PDF */}
+                <div className="mt-8 pt-4 border-t border-gray-200 text-center text-gray-600">
+                  <p>Generated by SmartVoyage AI • Your AI-powered travel companion</p>
+                  <p className="text-sm mt-1">Visit smartvoyage.com for more travel inspiration</p>
+                </div>
               </div>
             </div>
             {/* Export and Share Buttons */}
             <div className="text-center print:hidden space-y-3">
               <div className="flex gap-3 justify-center flex-wrap">
+                <button
+                  onClick={handleExportPdf}
+                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold shadow-lg"
+                >
+                  Export Trip to PDF
+                </button>
                 <button 
                   onClick={handlePrintClick}
                   className="px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-semibold shadow-lg"
@@ -723,6 +790,15 @@ const ItineraryGenerator: React.FC = () => {
                   >
                     <Bookmark className="h-4 w-4 mr-2" />
                     Save Trip
+                  </button>
+                )}
+                {itinerary && (
+                  <button
+                    onClick={handleGeneratePackingList}
+                    className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold shadow-lg flex items-center"
+                  >
+                    <Package className="h-4 w-4 mr-2" />
+                    Generate Packing List
                   </button>
                 )}
               </div>
@@ -954,6 +1030,43 @@ const ItineraryGenerator: React.FC = () => {
                 </div>
               </div>
             )}
+            {/* Packing List Modal */}
+            <Dialog open={packingListModalOpen} onOpenChange={setPackingListModalOpen}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Your Personalized Packing List</DialogTitle>
+                  <DialogDescription>
+                    Here is a suggested packing list for your trip to {destination}.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="max-h-[60vh] overflow-y-auto p-4 bg-gray-50 rounded">
+                  {packingListLoading && (
+                    <div className="flex items-center justify-center">
+                      <svg className="animate-spin h-8 w-8 text-teal-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                      </svg>
+                      <span className="ml-2">Generating...</span>
+                    </div>
+                  )}
+                  {packingListError && <div className="text-red-600 text-center">{packingListError}</div>}
+                  {packingListContent && !packingListLoading && (
+                    <pre className="whitespace-pre-wrap font-sans text-sm">
+                      {packingListContent}
+                    </pre>
+                  )}
+                </div>
+                <DialogFooter>
+                  {packingListContent && !packingListLoading && (
+                    <Button variant="outline" onClick={handleCopyToClipboard}>
+                      <Clipboard className="h-4 w-4 mr-2" />
+                      Copy to Clipboard
+                    </Button>
+                  )}
+                  <Button onClick={() => setPackingListModalOpen(false)}>Close</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </div>

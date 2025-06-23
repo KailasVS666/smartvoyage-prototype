@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
-import { getItineraryFromAI } from "../services/aiService";
-import { buildItineraryPrompt } from "../utils/promptBuilder";
+import { getItineraryFromAI, generateTextFromAI } from "../services/aiService";
+import { buildItineraryPrompt, buildPackingListPrompt } from "../utils/promptBuilder";
 
 const router = Router();
 
@@ -31,6 +31,33 @@ router.post("/", async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Gemini API error:", error);
     res.status(500).json({ error: error.message || "Failed to generate itinerary." });
+  }
+});
+
+// POST /packing-list - Generate packing list
+router.post("/packing-list", async (req: Request, res: Response) => {
+  const { destination, duration, activities, travelers } = req.body;
+
+  if (!destination || !duration || !travelers) {
+    return res.status(400).json({ error: "Missing required fields: destination, duration, travelers" });
+  }
+
+  const prompt = buildPackingListPrompt({
+    destination,
+    duration,
+    activities: activities || [],
+    travelers,
+  });
+
+  try {
+    const { content, error } = await generateTextFromAI(prompt);
+    if (error) {
+      return res.status(500).json({ error });
+    }
+    res.json({ packingList: content });
+  } catch (error: any) {
+    console.error("Packing list generation error:", error);
+    res.status(500).json({ error: error.message || "Failed to generate packing list." });
   }
 });
 

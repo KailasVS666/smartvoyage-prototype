@@ -36,4 +36,16 @@ export async function getItineraryFromAI(prompt: string): Promise<{ itinerary?: 
   } catch (error: any) {
     return { error: `Failed to parse AI response as JSON: ${error.message}` };
   }
+}
+
+export async function generateTextFromAI(prompt: string): Promise<{ content?: string; error?: string }> {
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = await response.text();
+    return { content: text };
+  } catch (error: any) {
+    console.error("Gemini API error:", error);
+    return { error: `Failed to generate content from AI: ${error.message}` };
+  }
 } 
