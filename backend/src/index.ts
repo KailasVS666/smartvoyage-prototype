@@ -7,6 +7,7 @@ import itineraryRouter from "./routes/itinerary";
 import groupsRouter from './routes/groups';
 import admin from "firebase-admin";
 import path from "path";
+import tripsRouter from './routes/trips';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -26,6 +27,7 @@ app.use(express.json());
 // Mount the itinerary route
 app.use("/itinerary", itineraryRouter);
 app.use('/groups', groupsRouter);
+app.use('/trips', tripsRouter);
 
 app.get("/", (req, res) => {
   res.send("Backend is running");

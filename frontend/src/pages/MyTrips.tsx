@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { onSnapshot, collection, query as fsQuery, where, orderBy } from 'firebase/firestore';
+import { onSnapshot, collection, query as fsQuery, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 const MyTrips: React.FC = () => {
@@ -30,35 +30,72 @@ const MyTrips: React.FC = () => {
     }
   }, [user]);
 
-  // Real-time collaborative editing support for trip list
   useEffect(() => {
-    let isInitial = true;
     if (!user) return;
-    const tripsQuery = fsQuery(
-      collection(db, 'trips'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc')
-    );
-    const unsubscribe = onSnapshot(tripsQuery, (querySnapshot) => {
-      const trips: TripData[] = [];
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (typeof data.tripData === 'string') {
-          try {
-            const parsed = JSON.parse(data.tripData) as TripData;
-            trips.push({ ...parsed, tripId: data.tripId, userId: data.userId });
-          } catch (e) {
-            // fallback: skip or handle error
+    let isMounted = true;
+    const fetchTrips = async () => {
+      try {
+        setLoading(true);
+        // Query for trips where user is the owner
+        const ownedTripsQuery = fsQuery(
+          collection(db, 'trips'),
+          where('userId', '==', user.uid),
+          orderBy('createdAt', 'desc')
+        );
+        // Query for trips where user is a collaborator
+        const memberTripsQuery = fsQuery(
+          collection(db, 'trips'),
+          where('memberIds', 'array-contains', user.uid),
+          orderBy('createdAt', 'desc')
+        );
+        // Run both queries in parallel
+        const [ownedSnap, memberSnap] = await Promise.all([
+          getDocs(ownedTripsQuery),
+          getDocs(memberTripsQuery)
+        ]);
+        // Merge and deduplicate trips by tripId
+        const tripsMap = new Map();
+        ownedSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          tripsMap.set(docSnap.id, {
+            ...data,
+            tripId: docSnap.id,
+            userId: data.userId,
+            groupId: data.groupId,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+          });
+        });
+        memberSnap.forEach(docSnap => {
+          if (!tripsMap.has(docSnap.id)) {
+            const data = docSnap.data();
+            tripsMap.set(docSnap.id, {
+              ...data,
+              tripId: docSnap.id,
+              userId: data.userId,
+              groupId: data.groupId,
+              createdAt: data.createdAt,
+              updatedAt: data.updatedAt,
+            });
           }
+        });
+        if (isMounted) {
+          setTrips(Array.from(tripsMap.values()));
         }
-      });
-      setTrips(trips);
-      if (!isInitial) {
-        toast({ title: 'Trips updated', description: 'Your trips list was updated.' });
+      } catch (error) {
+        if (isMounted) {
+          toast({
+            title: "Error",
+            description: "Failed to load your trips.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      isInitial = false;
-    });
-    return () => unsubscribe();
+    };
+    fetchTrips();
+    return () => { isMounted = false; };
   }, [user]);
 
   const loadUserTrips = async () => {
@@ -66,7 +103,7 @@ const MyTrips: React.FC = () => {
     
     try {
       setLoading(true);
-      const userTrips = await getUserTrips(user.uid);
+      const userTrips = await getUserTrips(user);
       setTrips(userTrips);
     } catch (error) {
       toast({
@@ -81,7 +118,9 @@ const MyTrips: React.FC = () => {
 
   const handleDeleteTrip = async (tripId: string) => {
     try {
-      await deleteTrip(tripId);
+      if (!user) throw new Error("User not authenticated");
+      const idToken = await user.getIdToken();
+      await deleteTrip(tripId, idToken);
       setTrips(trips.filter(trip => trip.tripId !== tripId));
       toast({
         title: "Trip Deleted",
@@ -181,51 +220,40 @@ const MyTrips: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {trips.map((trip) => {
-              // Parse itinerary if it's a string
-              let parsedItinerary: AIItinerary | null = null;
-              if (typeof trip.itinerary === 'string') {
-                try {
-                  parsedItinerary = JSON.parse(trip.itinerary) as AIItinerary;
-                } catch (e) {
-                  parsedItinerary = null;
-                }
-              } else if (trip.itinerary && typeof trip.itinerary === 'object') {
-                parsedItinerary = trip.itinerary as AIItinerary;
-              }
               return (
                 <Card key={trip.tripId} className="hover:shadow-lg transition-shadow">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg text-gray-800 truncate">
-                      {trip.destination}
+                      {trip.destination || 'N/A'}
                     </CardTitle>
                     <p className="text-sm text-gray-500">
-                      Created {new Date(trip.createdAt).toLocaleDateString()}
+                      Created {trip.createdAt ? new Date(trip.createdAt).toLocaleDateString() : 'N/A'}
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div className="flex items-center text-gray-600">
                         <Calendar className="h-4 w-4 mr-1 text-teal-600" />
-                        {trip.duration} Days
+                        {trip.duration ? `${trip.duration} Days` : 'N/A'}
                       </div>
                       <div className="flex items-center text-gray-600">
                         <Users className="h-4 w-4 mr-1 text-teal-600" />
-                        {trip.travelers} {trip.travelers === 1 ? 'Person' : 'People'}
+                        {trip.travelers ? `${trip.travelers} ${trip.travelers === 1 ? 'Person' : 'People'}` : 'N/A'}
                       </div>
                       <div className="flex items-center text-gray-600">
                         <DollarSign className="h-4 w-4 mr-1 text-teal-600" />
-                        {trip.budget}
+                        {trip.budget || 'N/A'}
                       </div>
                       <div className="flex items-center text-gray-600">
                         <MapPin className="h-4 w-4 mr-1 text-teal-600" />
-                        {trip.preferences.slice(0, 2).join(', ')}
-                        {trip.preferences.length > 2 && '...'}
+                        {(trip.preferences || []).slice(0, 2).join(', ')}
+                        {(trip.preferences && trip.preferences.length > 2) && '...'}
                       </div>
                     </div>
-                    {/* Optionally, display a summary from parsedItinerary if available */}
-                    {parsedItinerary && parsedItinerary.days && (
+                    {/* Optionally, display a summary from itinerary if available */}
+                    {trip.itinerary && typeof trip.itinerary === 'object' && trip.itinerary.days && (
                       <div className="mt-2 text-xs text-gray-500">
-                        {parsedItinerary.days.length} days, first day: {parsedItinerary.days[0].summary}
+                        {trip.itinerary.days.length} days, first day: {trip.itinerary.days[0].summary}
                       </div>
                     )}
                     <Link 

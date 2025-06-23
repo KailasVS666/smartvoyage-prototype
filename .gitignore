@@ -23,8 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Firebase service account key (DO NOT COMMIT)
-/backend/smartvoyage-c4912-firebase-adminsdk-fbsvc-a81061ab95.json
+
 # Ignore .env files in all subdirectories
 **/.env
 

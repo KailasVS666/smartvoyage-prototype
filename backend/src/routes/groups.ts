@@ -46,21 +46,70 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
       // To add a viewer in the future: { uid: someUid, role: 'viewer' as const }
     ];
 
-    // 3. Create group doc in Firestore
-    const groupData: Omit<Group, 'groupId'> = {
+    // 3. Create group doc in Firestore atomically with all fields
+    const db = admin.firestore();
+    const groupRef = db.collection('groups').doc();
+    const groupId = groupRef.id;
+    const groupData: Group = {
+      groupId,
       name,
       createdBy: creatorUid,
       members,
       ...(tripId ? { tripId } : {}),
     };
-    const groupRef = await admin.firestore().collection('groups').add(groupData);
-    const groupId = groupRef.id;
-    await groupRef.update({ groupId });
+    await groupRef.set(groupData); // atomic write with all fields
 
     return res.status(201).json({ groupId });
   } catch (error: any) {
     console.error('Error creating group:', error);
     return res.status(500).json({ error: error.message || 'Failed to create group' });
+  }
+});
+
+// DELETE /groups/:groupId - Only admin can delete group
+router.delete('/:groupId', authMiddleware, async (req: Request, res: Response) => {
+  const { groupId } = req.params;
+  const requesterUid = req.user?.uid;
+  console.log(`[DELETE /groups/${groupId}] Requested by UID:`, requesterUid);
+  if (!groupId || !requesterUid) {
+    console.error('Missing groupId or user not authenticated', { groupId, requesterUid });
+    return res.status(400).json({ error: 'Missing groupId or user not authenticated' });
+  }
+  try {
+    const groupRef = admin.firestore().collection('groups').doc(groupId);
+    const groupSnap = await groupRef.get();
+    console.log(`[DELETE /groups/${groupId}] Fetched group document. Exists:`, groupSnap.exists);
+    if (!groupSnap.exists) {
+      console.error('Group not found:', groupId);
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    const groupData = groupSnap.data() as Group;
+    const isAdmin = groupData.members.some(m => m.uid === requesterUid && m.role === 'admin');
+    console.log(`[DELETE /groups/${groupId}] isAdmin:`, isAdmin);
+    if (!isAdmin) {
+      console.error('Only group admins can delete the group. UID:', requesterUid);
+      return res.status(403).json({ error: 'Only group admins can delete the group' });
+    }
+    // Delete all trips with this groupId
+    const db = admin.firestore();
+    const tripsQuery = await db.collection('trips').where('groupId', '==', groupId).get();
+    if (!tripsQuery.empty) {
+      const batch = db.batch();
+      tripsQuery.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+      console.log(`[DELETE /groups/${groupId}] Deleted ${tripsQuery.docs.length} associated trip(s).`);
+    } else {
+      console.log(`[DELETE /groups/${groupId}] No associated trips to delete.`);
+    }
+    await groupRef.delete();
+    console.log(`[DELETE /groups/${groupId}] Group deleted successfully.`);
+    // Optionally: delete associated trips here
+    return res.json({ success: true, message: 'Group and associated trips deleted' });
+  } catch (error: any) {
+    console.error('Error deleting group:', error && error.stack ? error.stack : error);
+    return res.status(500).json({ error: error.message || 'Failed to delete group' });
   }
 });
 

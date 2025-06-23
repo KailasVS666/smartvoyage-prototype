@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useReactToPrint } from 'react-to-print';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from "@/contexts/AuthContext";
-import { saveTrip, updateTrip, getTripById, Expense, addExpenseToTrip, getGroupById, Group, GroupMember, updateExpenseInTrip, deleteExpenseFromTrip, GroupRole, generatePackingList, listenToTripComments, addTripComment, TripComment } from "@/services/tripService";
+import { saveTrip, updateTrip, getTripById, Expense, addExpenseToTrip, getGroupById, Group, GroupMember, updateExpenseInTrip, deleteExpenseFromTrip, GroupRole, generatePackingList, listenToTripComments, addTripComment, TripComment, deleteGroupById, createGroup } from "@/services/tripService";
 import { Bookmark, BookmarkCheck, Pencil, Trash2, Clipboard, Package } from "lucide-react";
 import { onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -18,6 +18,7 @@ import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
 import { Badge } from '@/components/ui/badge';
 import html2pdf from 'html2pdf.js';
+import { useGroupRole } from "@/hooks/useGroupRole";
 
 const BUDGET_OPTIONS = [
   { label: "Low", value: "Low" },
@@ -53,7 +54,9 @@ type AIItinerary = {
 const ItineraryGenerator: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { user, signInWithGoogle } = useAuth();
-  
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
   // Helper function to map budget values from Plan page to ItineraryGenerator
   const mapBudgetValue = (budgetParam: string | null) => {
     switch (budgetParam) {
@@ -63,7 +66,16 @@ const ItineraryGenerator: React.FC = () => {
       default: return "Medium";
     }
   };
+
+  // Group-related state
+  const [group, setGroup] = useState<Group | null>(null);
+  const [groupLoading, setGroupLoading] = useState(false);
+  const [userInfoMap, setUserInfoMap] = useState<Record<string, { displayName: string; email: string }>>({});
   
+  // Get groupId and tripId from URL params
+  const groupId = searchParams.get('groupId');
+  const tripId = searchParams.get('tripId');
+
   // Form state
   const [destination, setDestination] = useState(searchParams.get("destination") || "");
   const [duration, setDuration] = useState(parseInt(searchParams.get("duration") || "5"));
@@ -77,9 +89,7 @@ const ItineraryGenerator: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [itinerary, setItinerary] = useState<AIItinerary | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // Toast
-  const { toast } = useToast();
+  const [tripOwnerId, setTripOwnerId] = useState<string | null>(null);
 
   // Refs
   const itineraryRef = useRef<HTMLDivElement | null>(null);
@@ -139,37 +149,89 @@ const ItineraryGenerator: React.FC = () => {
     });
   };
 
+  // Helper to wait for group to exist in Firestore
+  const waitForGroup = async (groupId: string, maxRetries = 5, delayMs = 200) => {
+    for (let i = 0; i < maxRetries; i++) {
+      const groupDoc = await getGroupById(groupId);
+      if (groupDoc) return groupDoc;
+      await new Promise(res => setTimeout(res, delayMs));
+    }
+    throw new Error('Group not found after waiting');
+  };
+
   // Save trip to Firestore
   const handleSaveTrip = async () => {
     if (!itinerary || !user) {
-      console.log("SaveTrip: missing itinerary or user", { itinerary, user });
+      toast({
+        title: "Cannot Save Trip",
+        description: !user ? "Please sign in to save your trip." : "Please generate an itinerary first.",
+        variant: "destructive"
+      });
       return;
     }
-    const groupId = searchParams.get("groupId") || undefined;
+
     try {
+      setLoading(true);
+      let finalGroupId: string | undefined = undefined;
+
+      // If this is a group trip (from URL params)
+      const isGroupTrip = searchParams.get("isGroupTrip") === "true";
+      if (isGroupTrip) {
+        const groupName = searchParams.get("groupName");
+        const inviteEmails = searchParams.get("inviteEmails")?.split(",") || [];
+        
+        if (!groupName) {
+          throw new Error("Group name is required for group trips");
+        }
+
+        // Create the group first
+        const idToken = await user.getIdToken();
+        const groupResult = await createGroup(groupName, inviteEmails, null, idToken);
+        finalGroupId = groupResult.groupId;
+
+        // Wait for the group to exist in Firestore
+        await waitForGroup(finalGroupId);
+
+        toast({
+          title: "Group Created",
+          description: "Successfully created your travel group!"
+        });
+      }
+
+      // Now save the trip
       const tripId = uuidv4();
       const tripData = {
         destination,
-        duration,
+        duration: typeof duration === 'string' ? parseInt(duration) : duration,
         budget,
         travelers,
         preferences,
-        itinerary: JSON.stringify(itinerary), // Save as string
-        ...(groupId ? { groupId } : {})
+        itinerary: JSON.stringify(itinerary),
+        ...(finalGroupId ? { groupId: finalGroupId } : {})
       };
-      console.log("Saving trip:", { userId: user.uid, tripId, tripData });
+
+      console.log("[handleSaveTrip] About to save trip:", tripData);
       await saveTrip(user.uid, tripId, tripData);
+      console.log("[handleSaveTrip] Trip save complete");
+      
       toast({
-        title: "Trip Saved!",
-        description: "Your itinerary has been saved to your account.",
+        title: "Success!",
+        description: isGroupTrip 
+          ? "Your group and trip have been saved." 
+          : "Your trip has been saved to your account.",
       });
+
+      // Redirect to My Trips page after successful save
+      navigate("/my-trips");
     } catch (error) {
-      console.error("SaveTrip error:", error);
+      console.error("[handleSaveTrip] Trip save failed:", error);
       toast({
         title: "Save Failed",
-        description: "Failed to save your trip. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to save your trip. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -218,7 +280,6 @@ const ItineraryGenerator: React.FC = () => {
   }, [searchParams]);
 
   // Fetch trip data and set tripOwnerId when tripId is present
-  const [tripOwnerId, setTripOwnerId] = useState<string | null>(null);
   useEffect(() => {
     const tid = searchParams.get('tripId');
     if (!tid) return;
@@ -334,7 +395,6 @@ const ItineraryGenerator: React.FC = () => {
   const [editError, setEditError] = useState<string | null>(null);
 
   // Get tripId from searchParams (for editing existing trip)
-  const tripId = searchParams.get('tripId');
   const isOwner = user && tripOwnerId && user.uid === tripOwnerId;
 
   // Open edit modal and initialize fields
@@ -413,8 +473,6 @@ const ItineraryGenerator: React.FC = () => {
 
   // Group members and user info state
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
-  const [userInfoMap, setUserInfoMap] = useState<Record<string, { displayName: string; email: string }>>({});
-  const [groupLoading, setGroupLoading] = useState(false);
 
   // Packing list state
   const [packingListModalOpen, setPackingListModalOpen] = useState(false);
@@ -422,36 +480,51 @@ const ItineraryGenerator: React.FC = () => {
   const [packingListContent, setPackingListContent] = useState('');
   const [packingListError, setPackingListError] = useState<string | null>(null);
 
-  // Fetch group members and user info if groupId
+  // Use the new hook to get the user's role in the group
+  const userRole = useGroupRole(group);
+
+  // Load group data if groupId is present
   useEffect(() => {
-    const groupId = searchParams.get('groupId');
-    if (!groupId) return;
-    setGroupLoading(true);
-    getGroupById(groupId).then(async (group) => {
-      if (group && Array.isArray(group.members)) {
-        setGroupMembers(group.members);
-        // Fetch user info for each member UID
-        const auth = getAuth();
-        const promises = group.members.map(async (m) => {
-          // Try to get from cache first
-          if (userInfoMap[m.uid]) return { uid: m.uid, ...userInfoMap[m.uid] };
-          // Try to get from currentUser
-          if (auth.currentUser && auth.currentUser.uid === m.uid) {
-            return { uid: m.uid, displayName: auth.currentUser.displayName || '', email: auth.currentUser.email || '' };
-          }
-          // Fallback: fetch from Firestore users collection or use UID as fallback
-          // (Firebase Auth client SDK cannot fetch arbitrary users for security reasons)
-          return { uid: m.uid, displayName: '', email: '' };
+    if (!groupId) return; // Only fetch group if groupId is present
+    const loadGroupData = async () => {
+      setGroupLoading(true);
+      try {
+        const groupData = await getGroupById(groupId);
+        if (groupData) {
+          setGroup(groupData);
+          // Load user info for group members
+          const memberPromises = groupData.members.map(async (member) => {
+            try {
+              const userInfo = await getUserInfo(member.uid);
+              return [member.uid, userInfo];
+            } catch (error) {
+              console.warn(`Could not load info for user ${member.uid}:`, error);
+              return [member.uid, { displayName: 'Unknown User', email: '' }];
+            }
+          });
+          const userInfoEntries = await Promise.all(memberPromises);
+          setUserInfoMap(Object.fromEntries(userInfoEntries));
+        } else {
+          toast({
+            title: "Group Access Error",
+            description: "You don't have access to this group or it doesn't exist.",
+            variant: "destructive"
+          });
+          navigate('/my-trips');
+        }
+      } catch (error) {
+        console.error('Error loading group:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load group information.",
+          variant: "destructive"
         });
-        const infos = await Promise.all(promises);
-        const infoMap: Record<string, { displayName: string; email: string }> = {};
-        infos.forEach(info => { infoMap[info.uid] = { displayName: info.displayName, email: info.email }; });
-        setUserInfoMap(infoMap);
+      } finally {
+        setGroupLoading(false);
       }
-      setGroupLoading(false);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+    };
+    loadGroupData();
+  }, [groupId, navigate, toast]);
 
   // Listen for expenses in real time if tripId and groupId
   useEffect(() => {
@@ -588,19 +661,6 @@ const ItineraryGenerator: React.FC = () => {
     });
   };
 
-  // Determine current user's group role
-  const [userRole, setUserRole] = useState<GroupRole | null>(null);
-  useEffect(() => {
-    if (!user || groupMembers.length === 0) {
-      setUserRole(null);
-      return;
-    }
-    const member = groupMembers.find(m => m.uid === user.uid);
-    setUserRole(member ? member.role : null);
-  }, [user, groupMembers]);
-
-  const canEdit = userRole === 'admin' || userRole === 'editor' || (user && user.uid === tripOwnerId);
-
   // Comments state
   const [comments, setComments] = useState<TripComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
@@ -642,6 +702,41 @@ const ItineraryGenerator: React.FC = () => {
     if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
     return `${Math.floor(diff/86400)}d ago`;
   };
+
+  // Add state for group deletion
+  const [deleteGroupDialogOpen, setDeleteGroupDialogOpen] = useState(false);
+  const [deleteGroupLoading, setDeleteGroupLoading] = useState(false);
+  const [deleteGroupError, setDeleteGroupError] = useState<string | null>(null);
+
+  // Add handler for group deletion
+  const handleDeleteGroup = async () => {
+    const groupId = searchParams.get('groupId');
+    if (!groupId || !user) return;
+    setDeleteGroupLoading(true);
+    setDeleteGroupError(null);
+    try {
+      const idToken = await user.getIdToken();
+      await deleteGroupById(groupId, idToken);
+      toast({ title: 'Group deleted', description: 'Group and associated trips deleted successfully.' });
+      setDeleteGroupDialogOpen(false);
+      navigate('/my-trips');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete group';
+      setDeleteGroupError(message);
+      toast({ title: 'Delete failed', description: message, variant: 'destructive' });
+    } finally {
+      setDeleteGroupLoading(false);
+    }
+  };
+
+  // Helper function to get user info
+  const getUserInfo = async (uid: string) => {
+    // This is a simplified version - implement proper user info fetching
+    return { displayName: uid, email: '' };
+  };
+
+  // Replace previous logic for canEdit
+  const canEdit = userRole === 'admin' || userRole === 'editor' || (user && user.uid === tripOwnerId);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -850,7 +945,10 @@ const ItineraryGenerator: React.FC = () => {
                     Sign in to save your trips to your account
                   </p>
                   <button 
-                    onClick={signInWithGoogle}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      signInWithGoogle(true);
+                    }}
                     className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
                   >
                     🔐 Sign in with Google
@@ -1070,6 +1168,13 @@ const ItineraryGenerator: React.FC = () => {
                     </div>
                   ))}
                 </div>
+                {userRole === 'admin' && (
+                  <div className="mt-4">
+                    <Button variant="destructive" onClick={() => setDeleteGroupDialogOpen(true)} disabled={deleteGroupLoading}>
+                      Delete Group
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
             {/* Packing List Modal */}
@@ -1160,6 +1265,24 @@ const ItineraryGenerator: React.FC = () => {
         )}
       </div>
       <Footer />
+      {/* Group Deletion Confirmation Dialog */}
+      <Dialog open={deleteGroupDialogOpen} onOpenChange={setDeleteGroupDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Group</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            Are you sure you want to delete this group? This action cannot be undone. All group members will lose access to this group and its trip.
+          </DialogDescription>
+          {deleteGroupError && <div className="text-red-600 text-sm mb-2">{deleteGroupError}</div>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteGroupDialogOpen(false)} disabled={deleteGroupLoading}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteGroup} disabled={deleteGroupLoading}>
+              {deleteGroupLoading ? 'Deleting...' : 'Delete Group'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

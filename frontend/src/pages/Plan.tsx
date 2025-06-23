@@ -60,9 +60,55 @@ const Plan = () => {
     }
   };
 
+  // Helper to wait for group to exist in Firestore
+  async function waitForGroup(groupId: string, maxRetries = 6, delayMs = 1000) {
+    const { auth } = await import("@/lib/firebase");
+    
+    // Wait for auth to be ready
+    if (!auth.currentUser) {
+      console.log("[waitForGroup] Waiting for auth to be ready...");
+      await new Promise<void>((resolve) => {
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+          if (user) {
+            unsubscribe();
+            resolve();
+          }
+        });
+      });
+    }
+
+    console.log("[waitForGroup] Auth ready, current user:", auth.currentUser?.uid);
+    
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const groupDoc = await import("@/lib/firebase").then(({ db }) => 
+          import("firebase/firestore").then(firestore => 
+            firestore.getDoc(firestore.doc(db, 'groups', groupId))
+          )
+        );
+        
+        if (!groupDoc.exists()) {
+          console.warn(`[waitForGroup] Attempt ${i + 1}: Group ${groupId} not found.`);
+        } else {
+          console.log("[waitForGroup] Group found:", {
+            groupId: groupDoc.id,
+            data: groupDoc.data()
+          });
+          return groupDoc;
+        }
+      } catch (error) {
+        console.warn(`[waitForGroup] Attempt ${i + 1}: Error getting group:`, error);
+      }
+      
+      if (i < maxRetries - 1) {
+        console.log(`[waitForGroup] Waiting ${delayMs}ms before next attempt...`);
+        await new Promise(res => setTimeout(res, delayMs));
+      }
+    }
+    throw new Error('Group not found after waiting');
+  }
+
   const handleGenerateItinerary = async () => {
-    let groupId: string | undefined = undefined;
-    let tripId: string | undefined = undefined;
     if (isGroupTrip) {
       // Validate group name and emails
       if (!groupName.trim()) {
@@ -78,32 +124,9 @@ const Plan = () => {
         toast({ title: "Sign in required", description: "Sign in to create a group trip.", variant: "destructive" });
         return;
       }
-      setGroupLoading(true);
-      try {
-        const idToken = await user.getIdToken();
-        const res = await createGroup(groupName, emails, null, idToken);
-        groupId = res.groupId;
-        // Immediately create a trip document for the group
-        tripId = uuidv4();
-        await saveTrip(user.uid, tripId, {
-          destination: formData.destination,
-          duration: typeof formData.duration === 'string' ? parseInt(formData.duration) : formData.duration,
-          budget: formData.budget,
-          travelers: formData.travelers,
-          preferences: formData.preferences,
-          itinerary: '', // No itinerary yet
-          groupId,
-        });
-        toast({ title: "Group created!", description: "Your group and trip were created successfully." });
-      } catch (err: unknown) {
-        let message = "Could not create group.";
-        if (err instanceof Error) message = err.message;
-        toast({ title: "Group creation failed", description: message, variant: "destructive" });
-        setGroupLoading(false);
-        return;
-      }
-      setGroupLoading(false);
     }
+
+    // Just pass all data as URL parameters
     const params = new URLSearchParams({
       destination: formData.destination,
       duration: formData.duration,
@@ -111,9 +134,13 @@ const Plan = () => {
       travelers: formData.travelers.toString(),
       travelType: formData.travelType.join(','),
       preferences: formData.preferences.join(','),
-      ...(groupId ? { groupId } : {}),
-      ...(tripId ? { tripId } : {}),
+      ...(isGroupTrip ? {
+        isGroupTrip: 'true',
+        groupName,
+        inviteEmails: inviteEmails.split(",").map(e => e.trim()).filter(Boolean).join(',')
+      } : {})
     });
+
     navigate(`/itinerary-generator?${params.toString()}`);
   };
 

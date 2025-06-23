@@ -1,9 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   User, 
-  signInWithPopup, 
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut, 
-  onAuthStateChanged 
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  AuthError
 } from 'firebase/auth';
 import { auth, provider } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -11,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (usePopup?: boolean) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -34,6 +38,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  // Handle redirect result when component mounts
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          setUser(result.user);
+          toast({
+            title: "Welcome!",
+            description: "Successfully signed in with Google.",
+          });
+        }
+      } catch (error) {
+        console.error('Redirect sign-in error:', error);
+        const authError = error as AuthError;
+        if (authError.code !== 'auth/cancelled-popup-request') {
+          toast({
+            title: "Sign In Failed",
+            description: authError.message || "Failed to sign in with Google.",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    handleRedirectResult();
+  }, [toast]);
+
+  // Listen for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
@@ -43,22 +76,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (usePopup: boolean = true) => {
     try {
       setLoading(true);
-      await signInWithPopup(auth, provider);
-      toast({
-        title: "Welcome!",
-        description: "Successfully signed in with Google.",
-      });
-    } catch (error: any) {
+      if (usePopup) {
+        await signInWithPopup(auth, provider);
+      } else {
+        await signInWithRedirect(auth, provider);
+      }
+      // Toast is shown after redirect result is handled
+    } catch (error) {
       console.error('Error signing in with Google:', error);
-      toast({
-        title: "Sign In Failed",
-        description: error.message || "Failed to sign in with Google.",
-        variant: "destructive",
-      });
-    } finally {
+      const authError = error as AuthError;
+      if (authError.code !== 'auth/cancelled-popup-request') {
+        toast({
+          title: "Sign In Failed",
+          description: authError.message || "Failed to sign in with Google.",
+          variant: "destructive",
+        });
+      }
       setLoading(false);
     }
   };
@@ -70,11 +106,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         title: "Signed Out",
         description: "You have been successfully signed out.",
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error signing out:', error);
+      const authError = error as AuthError;
       toast({
         title: "Sign Out Failed",
-        description: error.message || "Failed to sign out.",
+        description: authError.message || "Failed to sign out.",
         variant: "destructive",
       });
     }
