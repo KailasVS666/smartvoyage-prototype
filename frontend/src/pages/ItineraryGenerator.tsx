@@ -504,6 +504,7 @@ const ItineraryGenerator: React.FC = () => {
           });
           const userInfoEntries = await Promise.all(memberPromises);
           setUserInfoMap(Object.fromEntries(userInfoEntries));
+          setGroupMembers(groupData.members);
         } else {
           toast({
             title: "Group Access Error",
@@ -525,6 +526,20 @@ const ItineraryGenerator: React.FC = () => {
     };
     loadGroupData();
   }, [groupId, navigate, toast]);
+
+  // For solo trips, set groupMembers to just the current user
+  useEffect(() => {
+    if (groupId) return; // Only run for solo trips
+    if (user) {
+      setGroupMembers([{ uid: user.uid, role: 'admin' }]);
+      setUserInfoMap({
+        [user.uid]: {
+          displayName: user.displayName || user.email || 'You',
+          email: user.email || '',
+        },
+      });
+    }
+  }, [groupId, user]);
 
   // Listen for expenses in real time if tripId and groupId
   useEffect(() => {
