@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { onSnapshot, collection, query as fsQuery, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import Navigation from "../components/Navigation";
 
 const MyTrips: React.FC = () => {
   const { user, logout } = useAuth();
@@ -166,6 +167,8 @@ const MyTrips: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Navigation />
+      <main className="pt-20">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-6xl mx-auto px-4 py-4">
@@ -284,6 +287,7 @@ const MyTrips: React.FC = () => {
           </div>
         )}
       </div>
+      </main>
     </div>
   );
 };
