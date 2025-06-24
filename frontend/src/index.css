@@ -1,7 +1,10 @@
+@import 'leaflet/dist/leaflet.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Your custom styles below */
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. */
 

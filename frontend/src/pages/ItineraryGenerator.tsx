@@ -5,7 +5,7 @@ import { useReactToPrint } from 'react-to-print';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from "@/contexts/AuthContext";
 import { saveTrip, updateTrip, getTripById, Expense, addExpenseToTrip, getGroupById, Group, GroupMember, updateExpenseInTrip, deleteExpenseFromTrip, GroupRole, generatePackingList, listenToTripComments, addTripComment, TripComment, deleteGroupById, createGroup } from "@/services/tripService";
-import { Bookmark, BookmarkCheck, Pencil, Trash2, Clipboard, Package } from "lucide-react";
+import { Bookmark, BookmarkCheck, Pencil, Trash2, Clipboard, Package, Briefcase } from "lucide-react";
 import { onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -21,6 +21,19 @@ import html2pdf from 'html2pdf.js';
 import { useGroupRole } from "@/hooks/useGroupRole";
 import UserTripAccessStatus from "@/components/UserTripAccessStatus";
 import { getUserRole, normalizeMembersToArray } from "@/lib/groupUtils";
+import { addPackingListItem, toggleItemPacked, deletePackingListItem, PackingListItem } from "@/services/packingService";
+import { 
+  Alert, 
+  AlertDescription, 
+  AlertTitle 
+} from "@/components/ui/alert";
+import { Terminal, Map, Users as UsersIcon, Settings, Calendar, Share2, Users, Plus, Copy, Check } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+import { TabsContent } from "@/components/ui/tabs";
+import ItineraryMap, { MapLocation } from '@/components/ItineraryMap';
+import TripViewTabs from '@/components/TripViewTabs';
 
 const BUDGET_OPTIONS = [
   { label: "Low", value: "Low" },
@@ -45,9 +58,43 @@ type AIItinerary = {
       time: string;
       title: string;
       description: string;
+      lat?: number;
+      lng?: number;
     }[];
   }[];
 };
+
+// GroupBalanceSummary component (to be implemented below main component)
+function GroupBalanceSummary({ expenses, groupMembers, currentUser, userInfoMap }: { expenses: Expense[]; groupMembers: GroupMember[]; currentUser: User | null; userInfoMap: Record<string, { displayName: string; email: string }>; }) {
+  // Calculate balances
+  const balances: Record<string, number> = {};
+  expenses.forEach(exp => {
+    const share = exp.amount / exp.splitBetween.length;
+    exp.splitBetween.forEach(uid => {
+      if (!balances[uid]) balances[uid] = 0;
+      balances[uid] -= share;
+    });
+    if (!balances[exp.paidBy]) balances[exp.paidBy] = 0;
+    balances[exp.paidBy] += exp.amount;
+  });
+  // Render summary
+  return (
+    <div className="bg-gray-100 rounded p-4 mt-2">
+      <h4 className="font-semibold mb-2">Balance Summary</h4>
+      {Object.keys(balances).length === 0 ? (
+        <div className="text-gray-500">No balances yet.</div>
+      ) : (
+        <ul className="text-sm">
+          {Object.entries(balances).map(([uid, bal]) => (
+            <li key={uid} className={uid === currentUser?.uid ? 'font-bold text-teal-700' : ''}>
+              {(userInfoMap[uid]?.displayName || userInfoMap[uid]?.email || uid)}: {bal >= 0 ? `is owed $${bal.toFixed(2)}` : `owes $${(-bal).toFixed(2)}`}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /**
  * ItineraryGenerator
@@ -485,6 +532,46 @@ const ItineraryGenerator: React.FC = () => {
   // Use the new hook to get the user's role in the group
   const userRole = useGroupRole(group);
 
+  // State for the collaborative packing list
+  const [packingList, setPackingList] = useState<PackingListItem[]>([]);
+  const [newItem, setNewItem] = useState("");
+  const [collabPackingListLoading, setCollabPackingListLoading] = useState(false);
+
+  // Handlers for collaborative packing list
+  const handleAddItem = async () => {
+    if (!tripId || !newItem.trim()) return;
+    setCollabPackingListLoading(true);
+    try {
+      await addPackingListItem(tripId, newItem.trim());
+      setNewItem("");
+    } catch (error) {
+      console.error("Failed to add packing item:", error);
+      toast({ title: "Error", description: "Could not add item.", variant: "destructive" });
+    } finally {
+      setCollabPackingListLoading(false);
+    }
+  };
+
+  const handleToggleItem = async (itemId: string) => {
+    if (!tripId) return;
+    try {
+      await toggleItemPacked(tripId, itemId);
+    } catch (error) {
+      console.error("Failed to toggle item:", error);
+      toast({ title: "Error", description: "Could not update item.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    if (!tripId) return;
+    try {
+      await deletePackingListItem(tripId, itemId);
+    } catch (error) {
+      console.error("Failed to delete item:", error);
+      toast({ title: "Error", description: "Could not delete item.", variant: "destructive" });
+    }
+  };
+
   // Load group data if groupId is present
   useEffect(() => {
     if (!groupId) return; // Only fetch group if groupId is present
@@ -568,6 +655,21 @@ const ItineraryGenerator: React.FC = () => {
     });
     return () => unsubscribe();
   }, [searchParams]);
+
+  // Listen for real-time packing list updates
+  useEffect(() => {
+    if (!tripId) return;
+
+    const tripDocRef = doc(db, 'trips', tripId);
+    const unsubscribe = onSnapshot(tripDocRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setPackingList(data.packingList || []);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [tripId]);
 
   // Edit/Delete expense state
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -761,6 +863,27 @@ const ItineraryGenerator: React.FC = () => {
   // Replace previous logic for canEdit
   const canEdit = userRole === 'admin' || userRole === 'editor' || (user && user.uid === tripOwnerId);
 
+  // Extract locations for the map from the itinerary
+  const mapLocations: MapLocation[] = itinerary?.days.flatMap(day => 
+    day.activities
+      .filter(activity => activity.lat != null && activity.lng != null)
+      .map(activity => ({
+        name: activity.title,
+        description: activity.description,
+        lat: activity.lat!,
+        lng: activity.lng!,
+      }))
+  ) || [];
+
+  // Temporary mock data for testing map
+  const mockLocations: MapLocation[] = [
+    { name: "Eiffel Tower", description: "Iconic landmark of Paris.", lat: 48.8584, lng: 2.2945 },
+    { name: "Louvre Museum", description: "Home of the Mona Lisa.", lat: 48.8606, lng: 2.3376 },
+    { name: "Cathédrale Notre-Dame de Paris", description: "Historic Catholic cathedral.", lat: 48.8530, lng: 2.3499 },
+  ];
+
+  const finalMapLocations = mapLocations.length > 0 ? mapLocations : mockLocations;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
@@ -879,8 +1002,9 @@ const ItineraryGenerator: React.FC = () => {
         {/* Itinerary Result */}
         {itinerary && (
           <div ref={itineraryRef} className="mt-6 space-y-6">
-            <h3 className="text-lg font-bold mb-4">Your Itinerary</h3>
-            {/* Printable Content */}
+            <TripViewTabs
+              itineraryContent={
+                (
             <div ref={pdfContentRef}>
               <div ref={componentRef} className="bg-white text-black p-6 rounded-lg shadow-md print:p-0 print:shadow-none">
                 {/* Header for PDF */}
@@ -925,8 +1049,222 @@ const ItineraryGenerator: React.FC = () => {
                 </div>
               </div>
             </div>
+                )
+              }
+              dashboardContent={
+                (
+                        <div>
+                    {/* All other components like expenses, packing list, etc. go here */}
+                    {/* Group Expenses UI */}
+            {searchParams.get('groupId') && (
+              <div className="mt-8">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-bold">Group Expenses</h3>
+                  <Button onClick={() => setExpenseModalOpen(true)} className="bg-teal-600 text-white" disabled={!canEdit}>Add Expense</Button>
+                </div>
+                <div className="overflow-x-auto bg-gray-50 rounded-lg p-4 mb-4">
+                  {!canEdit && (
+                    <div className="text-yellow-700 bg-yellow-100 border border-yellow-300 rounded p-2 mb-4 text-center">
+                      You have view-only access to this trip. Only admins and editors can make changes.
+                    </div>
+                  )}
+                  {expenses.length === 0 ? (
+                    <div className="text-gray-500">No expenses yet.</div>
+                  ) : (
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-700">
+                          <th className="py-1 px-2">Title</th>
+                          <th className="py-1 px-2">Amount</th>
+                          <th className="py-1 px-2">Paid By</th>
+                          <th className="py-1 px-2">Split Between</th>
+                          <th className="py-1 px-2">Date</th>
+                          <th className="py-1 px-2">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expenses.sort((a, b) => b.timestamp - a.timestamp).map(exp => (
+                          <tr key={exp.id} className="border-t">
+                            <td className="py-1 px-2">{exp.title}</td>
+                            <td className="py-1 px-2">${exp.amount.toFixed(2)}</td>
+                            <td className="py-1 px-2">{userInfoMap[exp.paidBy]?.displayName || userInfoMap[exp.paidBy]?.email || exp.paidBy}</td>
+                            <td className="py-1 px-2">{exp.splitBetween.map(uid => userInfoMap[uid]?.displayName || userInfoMap[uid]?.email || uid).join(', ')}</td>
+                            <td className="py-1 px-2">{new Date(exp.timestamp).toLocaleString()}</td>
+                            <td className="py-1 px-2 flex gap-2">
+                              <button onClick={() => canEdit && handleEditExpense(exp)} className={`text-blue-600 hover:text-blue-800 ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`} title="Edit" disabled={!canEdit}><Pencil className="h-4 w-4" /></button>
+                              <button onClick={() => canEdit && setDeleteExpenseId(exp.id)} className={`text-red-600 hover:text-red-800 ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`} title="Delete" disabled={!canEdit}><Trash2 className="h-4 w-4" /></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                        {/* Edit Expense Modal */}
+                {/* Balance Summary */}
+                <GroupBalanceSummary expenses={expenses} groupMembers={groupMembers} currentUser={user} userInfoMap={userInfoMap} />
+                {/* Add Expense Modal */}
+                <Dialog open={expenseModalOpen} onOpenChange={setExpenseModalOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add Expense</DialogTitle>
+                    </DialogHeader>
+                    <DialogDescription>
+                      Fill in the details below to add a new group expense. All group members will see this in real time.
+                    </DialogDescription>
+                    <form onSubmit={handleAddExpense} className="space-y-4">
+                      <Input
+                        placeholder="Title (e.g. Dinner)"
+                        value={expenseForm.title}
+                        onChange={e => setExpenseForm(f => ({ ...f, title: e.target.value }))}
+                        required
+                        disabled={!canEdit}
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Amount"
+                        value={expenseForm.amount}
+                        onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
+                        required
+                        min={0.01}
+                        step={0.01}
+                        disabled={!canEdit}
+                      />
+                      {/* Paid By dropdown */}
+                      <div className="flex gap-2">
+                        <Select
+                          value={expenseForm.paidBy}
+                          onValueChange={val => setExpenseForm(f => ({ ...f, paidBy: val }))}
+                          required
+                          disabled={!canEdit}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Paid By" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {groupMembers.map(m => (
+                              <SelectItem key={m.uid} value={m.uid}>
+                                {userInfoMap[m.uid]?.displayName || userInfoMap[m.uid]?.email || m.uid}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {/* Split Between multi-select (simple checkboxes for now) */}
+                      <div className="flex flex-col gap-1">
+                        <div className="font-medium text-sm mb-1">Split Between</div>
+                        {groupMembers.map(m => (
+                          <label key={m.uid} className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={expenseForm.splitBetween.includes(m.uid)}
+                              onChange={e => {
+                                const checked = e.target.checked;
+                                setExpenseForm(f => ({
+                                  ...f,
+                                  splitBetween: checked
+                                    ? [...f.splitBetween, m.uid]
+                                    : f.splitBetween.filter(uid => uid !== m.uid)
+                                }));
+                              }}
+                              disabled={!canEdit}
+                            />
+                            {userInfoMap[m.uid]?.displayName || userInfoMap[m.uid]?.email || m.uid}
+                          </label>
+                        ))}
+                      </div>
+                      {expenseError && <div className="text-red-600 text-sm">{expenseError}</div>}
+                      <DialogFooter>
+                        <Button type="submit" disabled={expenseLoading || !canEdit} className="bg-teal-600 text-white w-full">{expenseLoading ? (editingExpense ? 'Saving...' : 'Adding...') : (editingExpense ? 'Save Changes' : 'Add Expense')}</Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
+
+                    {/* Collaborative Packing List */}
+                    {groupId && (
+                      <Card className="mt-8">
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Briefcase className="h-6 w-6" /> Collaborative Packing List
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {packingList.length > 0 ? (
+                            <div className="space-y-3">
+                              {packingList.map((item) => (
+                                <div key={item.id} className="flex items-center gap-3 p-2 rounded-md transition-colors hover:bg-gray-50">
+                                  <Checkbox
+                                    id={`item-${item.id}`}
+                                    checked={!!item.packedBy}
+                                    onCheckedChange={() => handleToggleItem(item.id)}
+                                  />
+                                  <div className="flex-1">
+                                    <label
+                                      htmlFor={`item-${item.id}`}
+                                      className={cn(
+                                        "font-medium cursor-pointer",
+                                        item.packedBy && "line-through text-gray-500"
+                                      )}
+                                    >
+                                      {item.item}
+                                    </label>
+                                    <p className="text-xs text-gray-500">
+                                      Added by {userInfoMap[item.addedBy]?.displayName || 'Unknown'}.
+                                      {item.packedBy && ` Packed by ${userInfoMap[item.packedBy]?.displayName || 'Unknown'}.`}
+                                    </p>
+                                  </div>
+                                  {(userRole === 'admin' || item.addedBy === user?.uid) && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleDeleteItem(item.id)}
+                                      className="h-8 w-8 text-gray-500 hover:text-red-500"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      <span className="sr-only">Delete item</span>
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-gray-500">No items on the packing list yet. Add one below!</p>
+                          )}
+
+                          <form onSubmit={(e) => { e.preventDefault(); handleAddItem(); }} className="mt-4">
+                            <div className="flex gap-2">
+                              <Input
+                                value={newItem}
+                                onChange={(e) => setNewItem(e.target.value)}
+                                placeholder="e.g., Sunscreen, Hiking boots..."
+                                disabled={collabPackingListLoading}
+                              />
+                              <Button type="submit" disabled={!newItem.trim() || collabPackingListLoading}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                {collabPackingListLoading ? 'Adding...' : 'Add'}
+                              </Button>
+                            </div>
+                          </form>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                )
+              }
+              mapContent={
+                (
+                  <div className="h-[600px] w-full mt-4">
+                    <ItineraryMap locations={finalMapLocations} />
+                  </div>
+                )
+              }
+            />
+
             {/* Export and Share Buttons */}
-            <div className="text-center print:hidden space-y-3">
+            <div className="text-center print:hidden space-y-3 mt-6">
               <div className="flex gap-3 justify-center flex-wrap">
                 <button
                   onClick={handleExportPdf}
@@ -1039,147 +1377,6 @@ const ItineraryGenerator: React.FC = () => {
                 )}
               </div>
             )}
-            {/* Group Expenses UI (inside main return, after itinerary display) */}
-            {searchParams.get('groupId') && (
-              <div className="mt-8">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg font-bold">Group Expenses</h3>
-                  <Button onClick={() => setExpenseModalOpen(true)} className="bg-teal-600 text-white" disabled={!canEdit}>Add Expense</Button>
-                </div>
-                <div className="overflow-x-auto bg-gray-50 rounded-lg p-4 mb-4">
-                  {!canEdit && (
-                    <div className="text-yellow-700 bg-yellow-100 border border-yellow-300 rounded p-2 mb-4 text-center">
-                      You have view-only access to this trip. Only admins and editors can make changes.
-                    </div>
-                  )}
-                  {expenses.length === 0 ? (
-                    <div className="text-gray-500">No expenses yet.</div>
-                  ) : (
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-gray-700">
-                          <th className="py-1 px-2">Title</th>
-                          <th className="py-1 px-2">Amount</th>
-                          <th className="py-1 px-2">Paid By</th>
-                          <th className="py-1 px-2">Split Between</th>
-                          <th className="py-1 px-2">Date</th>
-                          <th className="py-1 px-2">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {expenses.sort((a, b) => b.timestamp - a.timestamp).map(exp => (
-                          <tr key={exp.id} className="border-t">
-                            <td className="py-1 px-2">{exp.title}</td>
-                            <td className="py-1 px-2">${exp.amount.toFixed(2)}</td>
-                            <td className="py-1 px-2">{userInfoMap[exp.paidBy]?.displayName || userInfoMap[exp.paidBy]?.email || exp.paidBy}</td>
-                            <td className="py-1 px-2">{exp.splitBetween.map(uid => userInfoMap[uid]?.displayName || userInfoMap[uid]?.email || uid).join(', ')}</td>
-                            <td className="py-1 px-2">{new Date(exp.timestamp).toLocaleString()}</td>
-                            <td className="py-1 px-2 flex gap-2">
-                              <button onClick={() => canEdit && handleEditExpense(exp)} className={`text-blue-600 hover:text-blue-800 ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`} title="Edit" disabled={!canEdit}><Pencil className="h-4 w-4" /></button>
-                              <button onClick={() => canEdit && setDeleteExpenseId(exp.id)} className={`text-red-600 hover:text-red-800 ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`} title="Delete" disabled={!canEdit}><Trash2 className="h-4 w-4" /></button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-                {/* Balance Summary */}
-                <GroupBalanceSummary expenses={expenses} groupMembers={groupMembers} currentUser={user} userInfoMap={userInfoMap} />
-                {/* Add Expense Modal */}
-                <Dialog open={expenseModalOpen} onOpenChange={setExpenseModalOpen}>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add Expense</DialogTitle>
-                    </DialogHeader>
-                    <DialogDescription>
-                      Fill in the details below to add a new group expense. All group members will see this in real time.
-                    </DialogDescription>
-                    <form onSubmit={handleAddExpense} className="space-y-4">
-                      <Input
-                        placeholder="Title (e.g. Dinner)"
-                        value={expenseForm.title}
-                        onChange={e => setExpenseForm(f => ({ ...f, title: e.target.value }))}
-                        required
-                        disabled={!canEdit}
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Amount"
-                        value={expenseForm.amount}
-                        onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
-                        required
-                        min={0.01}
-                        step={0.01}
-                        disabled={!canEdit}
-                      />
-                      {/* Paid By dropdown */}
-                      <div className="flex gap-2">
-                        <Select
-                          value={expenseForm.paidBy}
-                          onValueChange={val => setExpenseForm(f => ({ ...f, paidBy: val }))}
-                          required
-                          disabled={!canEdit}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Paid By" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {groupMembers.map(m => (
-                              <SelectItem key={m.uid} value={m.uid}>
-                                {userInfoMap[m.uid]?.displayName || userInfoMap[m.uid]?.email || m.uid}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {/* Split Between multi-select (simple checkboxes for now) */}
-                      <div className="flex flex-col gap-1">
-                        <div className="font-medium text-sm mb-1">Split Between</div>
-                        {groupMembers.map(m => (
-                          <label key={m.uid} className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={expenseForm.splitBetween.includes(m.uid)}
-                              onChange={e => {
-                                const checked = e.target.checked;
-                                setExpenseForm(f => ({
-                                  ...f,
-                                  splitBetween: checked
-                                    ? [...f.splitBetween, m.uid]
-                                    : f.splitBetween.filter(uid => uid !== m.uid)
-                                }));
-                              }}
-                              disabled={!canEdit}
-                            />
-                            {userInfoMap[m.uid]?.displayName || userInfoMap[m.uid]?.email || m.uid}
-                          </label>
-                        ))}
-                      </div>
-                      {expenseError && <div className="text-red-600 text-sm">{expenseError}</div>}
-                      <DialogFooter>
-                        <Button type="submit" disabled={expenseLoading || !canEdit} className="bg-teal-600 text-white w-full">{expenseLoading ? (editingExpense ? 'Saving...' : 'Adding...') : (editingExpense ? 'Save Changes' : 'Add Expense')}</Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            )}
-            {/* Add ConfirmDialog for delete confirmation */}
-            <Dialog open={!!deleteExpenseId} onOpenChange={open => !open && setDeleteExpenseId(null)}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Delete Expense</DialogTitle>
-                </DialogHeader>
-                <DialogDescription>
-                  Are you sure you want to delete this expense? This action cannot be undone.
-                </DialogDescription>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setDeleteExpenseId(null)} disabled={deleteLoading}>Cancel</Button>
-                  <Button variant="destructive" onClick={handleDeleteExpense} disabled={deleteLoading}>{deleteLoading ? 'Deleting...' : 'Delete'}</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
             {/* After groupMembers are loaded and if groupId is present, show group members and their roles */}
             {searchParams.get('groupId') && groupMembers.length > 0 && (
               <div className="mb-4">
@@ -1312,37 +1509,5 @@ const ItineraryGenerator: React.FC = () => {
     </div>
   );
 };
-
-// GroupBalanceSummary component (to be implemented below main component)
-function GroupBalanceSummary({ expenses, groupMembers, currentUser, userInfoMap }: { expenses: Expense[]; groupMembers: GroupMember[]; currentUser: User | null; userInfoMap: Record<string, { displayName: string; email: string }>; }) {
-  // Calculate balances
-  const balances: Record<string, number> = {};
-  expenses.forEach(exp => {
-    const share = exp.amount / exp.splitBetween.length;
-    exp.splitBetween.forEach(uid => {
-      if (!balances[uid]) balances[uid] = 0;
-      balances[uid] -= share;
-    });
-    if (!balances[exp.paidBy]) balances[exp.paidBy] = 0;
-    balances[exp.paidBy] += exp.amount;
-  });
-  // Render summary
-  return (
-    <div className="bg-gray-100 rounded p-4 mt-2">
-      <h4 className="font-semibold mb-2">Balance Summary</h4>
-      {Object.keys(balances).length === 0 ? (
-        <div className="text-gray-500">No balances yet.</div>
-      ) : (
-        <ul className="text-sm">
-          {Object.entries(balances).map(([uid, bal]) => (
-            <li key={uid} className={uid === currentUser?.uid ? 'font-bold text-teal-700' : ''}>
-              {(userInfoMap[uid]?.displayName || userInfoMap[uid]?.email || uid)}: {bal >= 0 ? `is owed $${bal.toFixed(2)}` : `owes $${(-bal).toFixed(2)}`}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 export default ItineraryGenerator; 
