@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { User } from "firebase/auth";
+import { normalizeMembersToArray, getUserRole } from '@/lib/groupUtils';
 
 // Add AIItinerary type
 export type AIItinerary = {
@@ -244,7 +245,8 @@ export const updateTrip = async (userId: string, tripId: string, tripData: SaveT
         const groupData = groupDoc.data();
         if (groupData?.members) {
           // Extract UIDs from all group members and ensure uniqueness
-          const groupMemberIds = groupData.members.map((member: GroupMember) => member.uid);
+          const membersArray = normalizeMembersToArray(groupData.members as Record<string, GroupRole> | GroupMember[]);
+          const groupMemberIds = membersArray.map((member) => member.uid);
           memberIds = [...new Set([...memberIds, ...groupMemberIds])];
         }
       }
@@ -370,22 +372,25 @@ export const getGroupById = async (groupId: string, maxRetries = 6, delayMs = 10
       if (!groupDoc.exists()) {
         console.warn(`[getGroupById] Attempt ${attempt}: Group ${groupId} not found.`);
       } else {
-        const data = groupDoc.data() as Group;
+        const data = groupDoc.data();
+        const membersArray = normalizeMembersToArray(data.members);
+        const isMember = getUserRole(data.members, currentUser.uid) !== null;
+
         // Log group data for debugging
         console.log("[getGroupById] Group data:", {
-          groupId: data.groupId,
+          groupId: groupDoc.id,
           createdBy: data.createdBy,
-          memberCount: data.members?.length,
+          memberCount: membersArray.length,
           currentUserIsCreator: data.createdBy === currentUser.uid,
-          currentUserIsMember: data.members?.some(m => m.uid === currentUser.uid)
+          currentUserIsMember: isMember
         });
         
-        // Return the group data
+        // Return the group data with members normalized to an array
         return {
           groupId: groupDoc.id,
           name: data.name,
           createdBy: data.createdBy,
-          members: data.members || [],
+          members: membersArray, // Return normalized array
           tripId: data.tripId
         };
       }

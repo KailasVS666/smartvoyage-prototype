@@ -19,6 +19,8 @@ import Footer from '@/components/Footer';
 import { Badge } from '@/components/ui/badge';
 import html2pdf from 'html2pdf.js';
 import { useGroupRole } from "@/hooks/useGroupRole";
+import UserTripAccessStatus from "@/components/UserTripAccessStatus";
+import { getUserRole, normalizeMembersToArray } from "@/lib/groupUtils";
 
 const BUDGET_OPTIONS = [
   { label: "Low", value: "Low" },
@@ -491,6 +493,12 @@ const ItineraryGenerator: React.FC = () => {
       try {
         const groupData = await getGroupById(groupId);
         if (groupData) {
+          // Debug logs for group membership
+          console.log("🔥 Group Members (normalized array):", groupData.members);
+          console.log("👤 Current User UID:", user?.uid);
+          const role = getUserRole(groupData.members, user?.uid);
+          console.log("🔍 Role for current user:", role || "none");
+
           setGroup(groupData);
           // Load user info for group members
           const memberPromises = groupData.members.map(async (member) => {
@@ -756,6 +764,9 @@ const ItineraryGenerator: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
+      {user && group?.members && (
+        <UserTripAccessStatus user={user} members={group.members} />
+      )}
       <div className="max-w-xl mx-auto p-6 bg-white rounded shadow mt-10">
         <h2 className="text-2xl font-bold mb-4">Travel Itinerary Generator</h2>
         <form onSubmit={handleSubmit} className="space-y-4">

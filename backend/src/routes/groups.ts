@@ -3,6 +3,8 @@ import admin from 'firebase-admin';
 import { Group, GroupMember } from '../types/group';
 import authMiddleware from '../middleware/auth';
 
+type GroupRole = 'admin' | 'editor' | 'viewer';
+
 const router = Router();
 
 // POST /groups/create
@@ -36,28 +38,29 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
       return res.status(404).json({ error: `User(s) not found: ${notFound.map((m) => m.email).join(', ')}` });
     }
 
-    // 2. Build members array: creator is admin, others are editors (viewers can be added in the future)
+    // 2. Build members map: creator is admin, others are editors
     const creatorUid = req.user!.uid;
-    const members: GroupMember[] = [
-      { uid: creatorUid, role: 'admin' },
-      ...memberLookups
-        .filter((m) => m.uid && m.uid !== creatorUid)
-        .map((m) => ({ uid: m.uid!, role: 'editor' as const })),
-      // To add a viewer in the future: { uid: someUid, role: 'viewer' as const }
-    ];
+    const membersMap: Record<string, GroupRole> = {
+      [creatorUid]: 'admin',
+    };
+    memberLookups.forEach((member) => {
+      if (member.uid && member.uid !== creatorUid) {
+        membersMap[member.uid] = 'editor';
+      }
+    });
 
     // 3. Create group doc in Firestore atomically with all fields
     const db = admin.firestore();
     const groupRef = db.collection('groups').doc();
     const groupId = groupRef.id;
-    const groupData: Group = {
+    const groupData = {
       groupId,
       name,
       createdBy: creatorUid,
-      members,
+      members: membersMap, // Use the new map
       ...(tripId ? { tripId } : {}),
     };
-    await groupRef.set(groupData); // atomic write with all fields
+    await groupRef.set(groupData);
 
     return res.status(201).json({ groupId });
   } catch (error: any) {
@@ -83,8 +86,8 @@ router.delete('/:groupId', authMiddleware, async (req: Request, res: Response) =
       console.error('Group not found:', groupId);
       return res.status(404).json({ error: 'Group not found' });
     }
-    const groupData = groupSnap.data() as Group;
-    const isAdmin = groupData.members.some(m => m.uid === requesterUid && m.role === 'admin');
+    const groupData = groupSnap.data() as { members: Record<string, GroupRole> };
+    const isAdmin = groupData.members[requesterUid] === 'admin';
     console.log(`[DELETE /groups/${groupId}] isAdmin:`, isAdmin);
     if (!isAdmin) {
       console.error('Only group admins can delete the group. UID:', requesterUid);

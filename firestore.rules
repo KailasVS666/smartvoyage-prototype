@@ -28,13 +28,13 @@ service cloud.firestore {
     match /trips/{tripId} {
       // Allow list operations if user is authenticated
       allow list: if isAuthenticated();
-      
+
       // Allow get if user is owner or in memberIds
       allow get: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         request.auth.uid in resource.data.memberIds
       );
-      
+
       // Allow create if user is the owner or if it's a group trip and user is in memberIds
       allow create: if isAuthenticated() && (
         request.auth.uid == request.resource.data.userId ||
