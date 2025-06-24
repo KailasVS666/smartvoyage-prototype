@@ -29,9 +29,6 @@ interface ItineraryMapProps {
   error?: string;
 }
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
-const MAPBOX_STYLE = 'mapbox/streets-v11';
-
 const ItineraryMap: React.FC<ItineraryMapProps> = ({ locations, isLoading, error }) => {
   // Use the first location as the initial center, or a default
   const initialCenter: [number, number] =
@@ -80,10 +77,8 @@ const ItineraryMap: React.FC<ItineraryMapProps> = ({ locations, isLoading, error
       className="rounded-lg shadow-lg"
     >
       <TileLayer
-        url={`https://api.mapbox.com/styles/v1/${MAPBOX_STYLE}/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`}
-        attribution='© Mapbox © OpenStreetMap'
-        tileSize={512}
-        zoomOffset={-1}
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       />
       {locations.map((location, idx) => (
         <Marker key={idx} position={[location.lat, location.lng]}>
