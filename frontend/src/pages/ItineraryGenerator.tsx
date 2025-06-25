@@ -1182,6 +1182,15 @@ const ItineraryGenerator: React.FC = () => {
     setReplanDiffDayIdx(null);
   };
 
+  // Add at the top, after other useState hooks
+  const [activityModal, setActivityModal] = useState<{ open: boolean, dayIdx: number | null, activityIdx: number | null }>({ open: false, dayIdx: null, activityIdx: null });
+  const [activityForm, setActivityForm] = useState({ time: '', title: '', description: '' });
+  const [editingActivity, setEditingActivity] = useState(false);
+  const [dayNotes, setDayNotes] = useState<{ [dayIdx: number]: string }>({});
+
+  // Add at the top, after other useState hooks (with other modals)
+  const [deleteActivityDialog, setDeleteActivityDialog] = useState<{ open: boolean, dayIdx: number | null, activityIdx: number | null }>({ open: false, dayIdx: null, activityIdx: null });
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
@@ -1331,12 +1340,38 @@ const ItineraryGenerator: React.FC = () => {
                               <li key={i} className="flex items-start gap-2 text-gray-800">
                                 <span className="font-bold">{act.time}</span>
                                 <span className="font-semibold">{act.title}</span>: {act.description}
+                                {/* Edit/Delete buttons */}
+                                <button className="ml-2 text-blue-500 hover:underline" onClick={() => {
+                                  setActivityForm({ time: act.time, title: act.title, description: act.description });
+                                  setActivityModal({ open: true, dayIdx: idx, activityIdx: i });
+                                  setEditingActivity(true);
+                                }}>Edit</button>
+                                <button className="ml-1 text-red-500 hover:underline" onClick={() => {
+                                  setDeleteActivityDialog({ open: true, dayIdx: idx, activityIdx: i });
+                                }}>Delete</button>
                               </li>
                             ))
                           ) : (
                             <li className="text-gray-500">No activities for this day.</li>
                           )}
                         </ul>
+                        {/* Add Activity button */}
+                        <button className="mt-2 px-3 py-1 bg-green-500 text-white rounded" onClick={() => {
+                          setActivityForm({ time: '', title: '', description: '' });
+                          setActivityModal({ open: true, dayIdx: idx, activityIdx: null });
+                          setEditingActivity(false);
+                        }}>Add Activity</button>
+                        {/* Day Note section */}
+                        <div className="mt-3">
+                          <label className="block font-medium mb-1">Day Note</label>
+                          <textarea
+                            className="w-full border rounded px-2 py-1"
+                            placeholder="Add a note for this day..."
+                            value={dayNotes[idx] || ''}
+                            onChange={e => setDayNotes({ ...dayNotes, [idx]: e.target.value })}
+                            rows={2}
+                          />
+                        </div>
                           {/* Weather Forecast for this day */}
                           {day.lat !== undefined && day.lng !== undefined && (
                             <WeatherForecast
@@ -1905,6 +1940,79 @@ const ItineraryGenerator: React.FC = () => {
           </DialogContent>
         </Dialog>
       )}
+      {activityModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-lg">
+            <h3 className="text-xl font-bold mb-4">{editingActivity ? 'Edit Activity' : 'Add Activity'}</h3>
+            <form onSubmit={e => {
+              e.preventDefault();
+              if (activityModal.dayIdx == null) return;
+              const newActivity = { ...activityForm };
+              const newDays = itinerary.days.map((d, dIdx) => {
+                if (dIdx !== activityModal.dayIdx) return d;
+                const newActs = [...d.activities];
+                if (editingActivity && activityModal.activityIdx != null) {
+                  newActs[activityModal.activityIdx] = newActivity;
+                } else {
+                  newActs.push(newActivity);
+                }
+                return { ...d, activities: newActs };
+              });
+              setItinerary({ ...itinerary, days: newDays });
+              setActivityModal({ open: false, dayIdx: null, activityIdx: null });
+              setEditingActivity(false);
+              // Toast for add/edit
+              toast({
+                title: editingActivity ? 'Activity updated!' : 'Activity added!',
+                description: editingActivity ? 'The activity was updated.' : 'A new activity was added to this day.'
+              });
+            }} className="space-y-4">
+              <div>
+                <label className="block font-medium mb-1">Time</label>
+                <input type="text" className="w-full border rounded px-2 py-1" value={activityForm.time} onChange={e => setActivityForm(f => ({ ...f, time: e.target.value }))} required />
+              </div>
+              <div>
+                <label className="block font-medium mb-1">Title</label>
+                <input type="text" className="w-full border rounded px-2 py-1" value={activityForm.title} onChange={e => setActivityForm(f => ({ ...f, title: e.target.value }))} required />
+              </div>
+              <div>
+                <label className="block font-medium mb-1">Description</label>
+                <textarea className="w-full border rounded px-2 py-1" value={activityForm.description} onChange={e => setActivityForm(f => ({ ...f, description: e.target.value }))} required rows={2} />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={() => { setActivityModal({ open: false, dayIdx: null, activityIdx: null }); setEditingActivity(false); }} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">{editingActivity ? 'Save' : 'Add'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Activity Dialog */}
+      <Dialog open={deleteActivityDialog.open} onOpenChange={open => setDeleteActivityDialog(d => ({ ...d, open }))}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Activity</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            Are you sure you want to delete this activity? This action cannot be undone.
+          </DialogDescription>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteActivityDialog({ open: false, dayIdx: null, activityIdx: null })}>Cancel</Button>
+            <Button variant="destructive" onClick={() => {
+              if (deleteActivityDialog.dayIdx == null || deleteActivityDialog.activityIdx == null) return;
+              const newDays = itinerary.days.map((d, dIdx) =>
+                dIdx === deleteActivityDialog.dayIdx ? { ...d, activities: d.activities.filter((_, aIdx) => aIdx !== deleteActivityDialog.activityIdx) } : d
+              );
+              setItinerary({ ...itinerary, days: newDays });
+              setDeleteActivityDialog({ open: false, dayIdx: null, activityIdx: null });
+              toast({
+                title: 'Activity deleted',
+                description: 'The activity was removed from this day.'
+              });
+            }}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
