@@ -34,6 +34,8 @@ import { cn } from "@/lib/utils";
 import { TabsContent } from "@/components/ui/tabs";
 import ItineraryMap, { MapLocation } from '@/components/ItineraryMap';
 import TripViewTabs from '@/components/TripViewTabs';
+import WeatherForecast from "@/components/WeatherForecast";
+import { geocodePlace } from "@/services/geocodeService";
 
 const BUDGET_OPTIONS = [
   { label: "Low", value: "Low" },
@@ -51,9 +53,11 @@ const PREFERENCE_OPTIONS = [
 
 // 1. Define the AIItinerary type
 type AIItinerary = {
-  days: {
+  days: Array<{
     day: number;
     summary: string;
+    lat?: number;
+    lng?: number;
     activities: {
       time: string;
       title: string;
@@ -61,7 +65,7 @@ type AIItinerary = {
       lat?: number;
       lng?: number;
     }[];
-  }[];
+  }>;
 };
 
 // GroupBalanceSummary component (to be implemented below main component)
@@ -139,6 +143,7 @@ const ItineraryGenerator: React.FC = () => {
   const [itinerary, setItinerary] = useState<AIItinerary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tripOwnerId, setTripOwnerId] = useState<string | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
 
   // Refs
   const itineraryRef = useRef<HTMLDivElement | null>(null);
@@ -249,7 +254,7 @@ const ItineraryGenerator: React.FC = () => {
 
       // Now save the trip
       const tripId = uuidv4();
-      const tripData = {
+      const rawTripData = {
         destination,
         duration: typeof duration === 'string' ? parseInt(duration) : duration,
         budget,
@@ -258,6 +263,15 @@ const ItineraryGenerator: React.FC = () => {
         itinerary: JSON.stringify(itinerary),
         ...(finalGroupId ? { groupId: finalGroupId } : {})
       };
+
+      // Utility to remove undefined fields
+      function omitUndefined<T extends object>(obj: T): T {
+        return Object.fromEntries(
+          Object.entries(obj).filter(([_, v]) => v !== undefined)
+        ) as T;
+      }
+
+      const tripData = omitUndefined(rawTripData);
 
       console.log("[handleSaveTrip] About to save trip:", tripData);
       await saveTrip(user.uid, tripId, tripData);
@@ -391,7 +405,7 @@ const ItineraryGenerator: React.FC = () => {
         else if (type === 'group') travelStyle = 'fast-paced';
       }
 
-      const response = await fetch("http://localhost:5000/itinerary", {
+      const response = await fetch("/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -404,15 +418,76 @@ const ItineraryGenerator: React.FC = () => {
       });
 
       const data = await response.json();
+      console.log('Itinerary API response:', response, data); // Debug log
 
-      if (!response.ok) {
+      if (data && data.itinerary) {
+        // Enhanced geocoding logic for days and activities
+        setGeoLoading(true);
+        const enhancedDays = await Promise.all(
+          data.itinerary.days.map(async (day) => {
+            let dayLat: number | undefined = undefined;
+            let dayLng: number | undefined = undefined;
+            let found = false;
+            // Try summary
+            if (day.summary) {
+              const geo = await geocodePlace(day.summary.split(',')[0]);
+              if (geo) {
+                dayLat = geo.lat;
+                dayLng = geo.lng;
+                found = true;
+              }
+            }
+            // Try each activity title if summary failed
+            if (!found && Array.isArray(day.activities)) {
+              for (const act of day.activities) {
+                if (act.title) {
+                  const geo = await geocodePlace(act.title);
+                  if (geo) {
+                    dayLat = geo.lat;
+                    dayLng = geo.lng;
+                    found = true;
+                    break;
+                  }
+                }
+              }
+            }
+            // Fallback to main destination
+            if (!found && destination) {
+              const geo = await geocodePlace(destination);
+              if (geo) {
+                dayLat = geo.lat;
+                dayLng = geo.lng;
+              }
+            }
+            // Geocode each activity for map
+            const enhancedActivities = await Promise.all(
+              (day.activities || []).map(async (act) => {
+                if (act.lat !== undefined && act.lng !== undefined) return act;
+                if (act.title) {
+                  const geo = await geocodePlace(act.title);
+                  if (geo) {
+                    return { ...act, lat: geo.lat, lng: geo.lng };
+                  }
+                }
+                return act;
+              })
+            );
+            return { ...day, lat: dayLat, lng: dayLng, activities: enhancedActivities };
+          })
+        );
+        setItinerary({ ...data.itinerary, days: enhancedDays });
+        setGeoLoading(false);
+        toast({ title: "Success", description: "Itinerary generated successfully!" });
+        setError(null);
+      } else if (!response.ok) {
         setError(data.error || "Failed to generate itinerary.");
         toast({ title: "Error", description: data.error || "Failed to generate itinerary.", variant: "destructive" });
       } else {
-        setItinerary(data.itinerary);
-        toast({ title: "Success", description: "Itinerary generated successfully!" });
+        setError("Unexpected error: No itinerary returned.");
+        toast({ title: "Error", description: "Unexpected error: No itinerary returned.", variant: "destructive" });
       }
     } catch (err) {
+      console.error("Itinerary generation error:", err);
       setError("Network error. Please try again.");
       toast({ title: "Error", description: "Network error. Please try again.", variant: "destructive" });
     } finally {
@@ -864,25 +939,39 @@ const ItineraryGenerator: React.FC = () => {
   const canEdit = userRole === 'admin' || userRole === 'editor' || (user && user.uid === tripOwnerId);
 
   // Extract locations for the map from the itinerary
-  const mapLocations: MapLocation[] = itinerary?.days.flatMap(day => 
-    day.activities
+  const mapLocations: MapLocation[] = itinerary?.days.flatMap(day => {
+    // Prefer activities with lat/lng
+    const activityLocs = (day.activities || [])
       .filter(activity => activity.lat != null && activity.lng != null)
       .map(activity => ({
         name: activity.title,
         description: activity.description,
         lat: activity.lat!,
         lng: activity.lng!,
-      }))
-  ) || [];
+      }));
+    // If no activity locations, use day location
+    if (activityLocs.length === 0 && day.lat !== undefined && day.lng !== undefined) {
+      return [{
+        name: day.summary,
+        description: day.summary,
+        lat: day.lat,
+        lng: day.lng,
+      }];
+    }
+    return activityLocs;
+  }) || [];
 
-  // Temporary mock data for testing map
-  const mockLocations: MapLocation[] = [
-    { name: "Eiffel Tower", description: "Iconic landmark of Paris.", lat: 48.8584, lng: 2.2945 },
-    { name: "Louvre Museum", description: "Home of the Mona Lisa.", lat: 48.8606, lng: 2.3376 },
-    { name: "Cathédrale Notre-Dame de Paris", description: "Historic Catholic cathedral.", lat: 48.8530, lng: 2.3499 },
-  ];
+  // Fallback to main destination if no locations
+  const finalMapLocations: MapLocation[] = mapLocations.length > 0
+    ? mapLocations
+    : destination
+      ? [{ name: destination, description: destination, lat: 51.5074, lng: -0.1278 }] // London default
+      : [];
 
-  const finalMapLocations = mapLocations.length > 0 ? mapLocations : mockLocations;
+  // Clear error when itinerary is set
+  useEffect(() => {
+    if (itinerary) setError(null);
+  }, [itinerary]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -995,7 +1084,7 @@ const ItineraryGenerator: React.FC = () => {
         )}
 
         {/* Error Message */}
-        {error && (
+        {error && !itinerary && (
           <div className="mt-4 text-red-600 text-center">{error}</div>
         )}
 
@@ -1016,28 +1105,39 @@ const ItineraryGenerator: React.FC = () => {
                 {/* Days */}
                 <div className="space-y-4">
                   {Array.isArray(itinerary?.days) && itinerary.days.length > 0 ? (
-                    itinerary.days.map((day, idx) => (
-                      <div
-                        key={day.day}
-                        className="border border-gray-200 rounded-lg p-4"
-                      >
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-teal-600 font-bold text-lg">Day {day.day}: {day.summary}</span>
-                        </div>
-                        <ul className="list-none pl-0 space-y-2">
-                          {Array.isArray(day.activities) && day.activities.length > 0 ? (
-                            day.activities.map((act, i) => (
-                              <li key={i} className="flex items-start gap-2 text-gray-800">
-                                <span className="font-bold">{act.time}</span>
-                                <span className="font-semibold">{act.title}</span>: {act.description}
-                              </li>
-                            ))
-                          ) : (
-                            <li className="text-gray-500">No activities for this day.</li>
+                    itinerary.days.map((dayRaw, idx) => {
+                      const day = dayRaw as { day: number; summary: string; lat?: number; lng?: number; activities: { time: string; title: string; description: string; lat?: number; lng?: number; }[] };
+                      return (
+                        <div
+                          key={day.day}
+                          className="border border-gray-200 rounded-lg p-4"
+                        >
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-teal-600 font-bold text-lg">Day {day.day}: {day.summary}</span>
+                          </div>
+                          <ul className="list-none pl-0 space-y-2">
+                            {Array.isArray(day.activities) && day.activities.length > 0 ? (
+                              day.activities.map((act, i) => (
+                                <li key={i} className="flex items-start gap-2 text-gray-800">
+                                  <span className="font-bold">{act.time}</span>
+                                  <span className="font-semibold">{act.title}</span>: {act.description}
+                                </li>
+                              ))
+                            ) : (
+                              <li className="text-gray-500">No activities for this day.</li>
+                            )}
+                          </ul>
+                          {/* Weather Forecast for this day */}
+                          {day.lat !== undefined && day.lng !== undefined && (
+                            <WeatherForecast
+                              lat={day.lat}
+                              lng={day.lng}
+                              date={new Date(Date.now() + (day.day - 1) * 24 * 60 * 60 * 1000)}
+                            />
                           )}
-                        </ul>
-                      </div>
-                    ))
+                        </div>
+                      );
+                    })
                   ) : (
                     <div className="text-gray-500">No itinerary days found.</div>
                   )}

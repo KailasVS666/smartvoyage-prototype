@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      '/itinerary': 'http://localhost:5000',
+    },
   },
   plugins: [
     react(),
@@ -15,5 +18,9 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+  },
+  // Ensure proper SPA handling
+  build: {
+    outDir: 'dist',
   },
 }));

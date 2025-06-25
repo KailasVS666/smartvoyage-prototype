@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Download, ArrowLeft, Clock, Camera, Utensils, Train, Plane } from "lucide-react";
@@ -6,12 +5,15 @@ import { Link } from "react-router-dom";
 import Navigation from "../components/Navigation";
 import Footer from "../components/Footer";
 import ScrollToTop from "../components/ScrollToTop";
+import WeatherForecast from "@/components/WeatherForecast";
 
 const Itinerary = () => {
   const itineraryDays = [
     {
       day: 1,
       title: "Arrival in Rome",
+      lat: 41.9028,
+      lng: 12.4964,
       activities: [
         { time: "10:00 AM", activity: "Arrive at Rome Fiumicino Airport", icon: Plane, type: "transport" },
         { time: "12:00 PM", activity: "Check-in at Hotel near Colosseum", icon: MapPin, type: "accommodation" },
@@ -22,6 +24,8 @@ const Itinerary = () => {
     {
       day: 2,
       title: "Vatican & Historic Rome",
+      lat: 41.9028,
+      lng: 12.4964,
       activities: [
         { time: "9:00 AM", activity: "Vatican Museums & Sistine Chapel", icon: Camera, type: "sightseeing" },
         { time: "1:00 PM", activity: "Traditional Roman Lunch", icon: Utensils, type: "food" },
@@ -32,6 +36,8 @@ const Itinerary = () => {
     {
       day: 3,
       title: "Rome to Florence",
+      lat: 43.7696,
+      lng: 11.2558,
       activities: [
         { time: "8:00 AM", activity: "High-speed train to Florence", icon: Train, type: "transport" },
         { time: "11:00 AM", activity: "Check-in at Florence Hotel", icon: MapPin, type: "accommodation" },
@@ -42,6 +48,8 @@ const Itinerary = () => {
     {
       day: 4,
       title: "Explore Florence",
+      lat: 43.7696,
+      lng: 11.2558,
       activities: [
         { time: "9:00 AM", activity: "Florence Walking Tour", icon: Camera, type: "sightseeing" },
         { time: "1:00 PM", activity: "Authentic Florentine Lunch", icon: Utensils, type: "food" },
@@ -52,6 +60,8 @@ const Itinerary = () => {
     {
       day: 5,
       title: "Florence to Venice",
+      lat: 45.4408,
+      lng: 12.3155,
       activities: [
         { time: "9:00 AM", activity: "Train to Venice", icon: Train, type: "transport" },
         { time: "12:00 PM", activity: "Water taxi to hotel", icon: MapPin, type: "transport" },
@@ -62,6 +72,8 @@ const Itinerary = () => {
     {
       day: 6,
       title: "Discover Venice",
+      lat: 45.4408,
+      lng: 12.3155,
       activities: [
         { time: "10:00 AM", activity: "St. Mark's Square & Basilica", icon: Camera, type: "sightseeing" },
         { time: "2:00 PM", activity: "Doge's Palace Tour", icon: Camera, type: "sightseeing" },
@@ -72,6 +84,8 @@ const Itinerary = () => {
     {
       day: 7,
       title: "Departure",
+      lat: 45.4408,
+      lng: 12.3155,
       activities: [
         { time: "10:00 AM", activity: "Final stroll through Venice", icon: Camera, type: "leisure" },
         { time: "1:00 PM", activity: "Check-out and lunch", icon: Utensils, type: "food" },
@@ -159,6 +173,7 @@ const Itinerary = () => {
                         </div>
                       ))}
                     </div>
+                    <WeatherForecast lat={day.lat} lng={day.lng} date={new Date(Date.now() + dayIndex * 24 * 60 * 60 * 1000)} />
                   </CardContent>
                 </Card>
               ))}

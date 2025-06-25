@@ -4,6 +4,9 @@ import { buildItineraryPrompt, buildPackingListPrompt } from "../utils/promptBui
 
 const router = Router();
 
+// Import node-fetch for backend geocoding
+const fetch = require('node-fetch');
+
 // POST / - Generate itinerary using Gemini API
 router.post("/", async (req: Request, res: Response) => {
   const { city, days, interests, budgetLevel, travelStyle } = req.body;
@@ -64,6 +67,28 @@ router.post("/packing-list", async (req: Request, res: Response) => {
 // Placeholder GET route
 router.get("/", (req: Request, res: Response) => {
   res.json({ message: "Itinerary endpoint placeholder" });
+});
+
+// Add a geocode proxy endpoint
+router.get('/geocode', async (req: Request, res: Response) => {
+  const place = req.query.place as string;
+  if (!place) {
+    return res.status(400).json({ error: 'Missing place parameter' });
+  }
+  try {
+    // Optionally: add rate limiting/caching here
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`;
+    const fetchRes = await fetch(url, {
+      headers: { 'User-Agent': 'SmartVoyage/1.0' }
+    });
+    if (!fetchRes.ok) {
+      return res.status(fetchRes.status).json({ error: 'Geocoding failed' });
+    }
+    const data = await fetchRes.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Geocoding error' });
+  }
 });
 
 export default router; 

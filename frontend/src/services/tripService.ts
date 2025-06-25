@@ -81,7 +81,7 @@ export const saveTrip = async (userId: string, tripId: string, tripData: SaveTri
     }
 
     // Ensure createdBy is set
-    const tripDoc = {
+    const tripDocRaw = {
       tripId,
       userId, // Owner of the trip
       createdBy: userId, // Explicitly set createdBy
@@ -97,6 +97,14 @@ export const saveTrip = async (userId: string, tripId: string, tripData: SaveTri
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+
+    // Utility to remove undefined fields
+    function omitUndefined<T extends object>(obj: T): T {
+      return Object.fromEntries(
+        Object.entries(obj).filter(([_, v]) => v !== undefined)
+      ) as T;
+    }
+    const tripDoc = omitUndefined(tripDocRaw);
 
     console.log("[saveTrip] Writing trip:", tripDoc);
     await setDoc(doc(db, 'trips', tripId), tripDoc);
