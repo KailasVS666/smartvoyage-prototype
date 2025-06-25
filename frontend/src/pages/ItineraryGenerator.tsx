@@ -1855,12 +1855,6 @@ const ItineraryGenerator: React.FC = () => {
               </div>
             </div>
             <DialogFooter>
-              {/* Debug output for troubleshooting Accept Changes button */}
-              <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>
-                <div>replanDiff: {JSON.stringify(replanDiff)}</div>
-                <div>replanDiffDayIdx: {String(replanDiffDayIdx)}</div>
-                <div>acceptingReplan: {String(acceptingReplan)}</div>
-              </div>
               <Button onClick={handleDiscardReplan} variant="outline">Discard</Button>
               <Button onClick={handleAcceptReplan} className="bg-teal-600 text-white" disabled={!replanDiff || replanDiffDayIdx == null || acceptingReplan}>{acceptingReplan ? 'Saving...' : 'Accept Changes'}</Button>
             </DialogFooter>
