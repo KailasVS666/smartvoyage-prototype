@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
-import { getItineraryFromAI, generateTextFromAI } from "../services/aiService";
+import { getItineraryFromAI, generateTextFromAI, generateItinerary } from "../services/aiService";
 import { buildItineraryPrompt, buildPackingListPrompt } from "../utils/promptBuilder";
+import authMiddleware from '../middleware/auth';
 
 const router = Router();
 
@@ -61,6 +62,21 @@ router.post("/packing-list", async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Packing list generation error:", error);
     res.status(500).json({ error: error.message || "Failed to generate packing list." });
+  }
+});
+
+// POST /replan-day - Replan a single day using Gemini
+router.post('/replan-day', authMiddleware, async (req: Request, res: Response) => {
+  const { prompt } = req.body;
+  if (!prompt) {
+    return res.status(400).json({ error: 'Missing prompt' });
+  }
+  try {
+    const text = await generateItinerary(prompt);
+    res.json({ text });
+  } catch (error: any) {
+    console.error('Gemini replan error:', error);
+    res.status(500).json({ error: error.message || 'Failed to replan day' });
   }
 });
 

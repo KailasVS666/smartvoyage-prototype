@@ -4,6 +4,7 @@ import { Menu, X, User, LogOut } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import LoginButton from "./LoginButton";
+import { getAuth } from 'firebase/auth';
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -151,6 +152,24 @@ const Navigation = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {process.env.NODE_ENV !== 'production' && (
+        <button
+          style={{ marginLeft: '1rem', padding: '0.5rem 1rem', background: '#eee', borderRadius: '4px', fontSize: '0.9rem' }}
+          onClick={async () => {
+            const user = getAuth().currentUser;
+            if (user) {
+              const token = await user.getIdToken();
+              console.log('Your Firebase ID token:', token);
+              alert(token);
+            } else {
+              alert('Not logged in');
+            }
+          }}
+        >
+          Show Token
+        </button>
       )}
     </nav>
   );

@@ -27,7 +27,7 @@ import {
   AlertDescription, 
   AlertTitle 
 } from "@/components/ui/alert";
-import { Terminal, Map, Users as UsersIcon, Settings, Calendar, Share2, Users, Plus, Copy, Check } from "lucide-react";
+import { Terminal, Map as MapIcon, Users as UsersIcon, Settings, Calendar, Share2, Users, Plus, Copy, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,8 @@ import ItineraryMap, { MapLocation } from '@/components/ItineraryMap';
 import TripViewTabs from '@/components/TripViewTabs';
 import WeatherForecast from "@/components/WeatherForecast";
 import { geocodePlace } from "@/services/geocodeService";
+import { Textarea } from "@/components/ui/textarea";
+import { getDailyWeatherForecast } from "@/services/weatherService";
 
 const BUDGET_OPTIONS = [
   { label: "Low", value: "Low" },
@@ -49,6 +51,14 @@ const PREFERENCE_OPTIONS = [
   "Nature",
   "Culture",
   "Relaxation",
+];
+
+const REPLAN_REASONS = [
+  "Rainy Day",
+  "Low Budget",
+  "More Leisure",
+  "Tired Day",
+  "Surprise Me"
 ];
 
 // 1. Define the AIItinerary type
@@ -67,6 +77,23 @@ type AIItinerary = {
     }[];
   }>;
 };
+
+// Define type for a single activity
+interface Activity {
+  time: string;
+  title: string;
+  description: string;
+  lat?: number;
+  lng?: number;
+  _diff?: 'removed' | 'changed' | 'new' | 'unchanged';
+}
+
+// Utility to remove undefined fields (define once at the top)
+function omitUndefined<T extends object>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([_, v]) => v !== undefined)
+  ) as T;
+}
 
 // GroupBalanceSummary component (to be implemented below main component)
 function GroupBalanceSummary({ expenses, groupMembers, currentUser, userInfoMap }: { expenses: Expense[]; groupMembers: GroupMember[]; currentUser: User | null; userInfoMap: Record<string, { displayName: string; email: string }>; }) {
@@ -973,6 +1000,182 @@ const ItineraryGenerator: React.FC = () => {
     if (itinerary) setError(null);
   }, [itinerary]);
 
+  // Replan state
+  const [replanModal, setReplanModal] = useState<{ open: boolean, dayIdx: number | null }>({ open: false, dayIdx: null });
+  const [replanReason, setReplanReason] = useState("");
+  const [replanCustom, setReplanCustom] = useState("");
+  const [replanLoading, setReplanLoading] = useState(false);
+  const [replanError, setReplanError] = useState<string | null>(null);
+  const [replanDiff, setReplanDiff] = useState<{ original: Activity[]; replanned: Activity[] } | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
+  const [acceptingReplan, setAcceptingReplan] = useState(false);
+
+  // Helper: Build replan prompt
+  async function buildReplanPrompt(dayIdx: number) {
+    if (!itinerary) return "";
+    const day = itinerary.days[dayIdx];
+    const dayNumber = day.day;
+    const tripDuration = itinerary.days.length;
+    const currentDayItinerary = day.activities.map(a => `${a.time} - ${a.title}: ${a.description}`).join("\n");
+    const weather = day.lat && day.lng ? await getDailyWeatherForecast(day.lat, day.lng, new Date(Date.now() + (day.day - 1) * 24 * 60 * 60 * 1000)) : null;
+    const weatherForecast = weather ? `${weather.condition}, ${weather.temperature}°C` : "N/A";
+    const userReason = replanCustom.trim() ? replanCustom : replanReason;
+    return `You are a smart travel assistant helping improve existing travel plans.\n\nHere is the current itinerary for Day ${dayNumber} of a ${tripDuration}-day trip to ${destination}:\n${currentDayItinerary}\n\nUser context:\n\nNumber of travelers: ${travelers}\n\nBudget level: ${budget}\n\nTravel style: fast-paced\n\nWeather forecast: ${weatherForecast}\n\nUser requested change:\n${userReason}\n\nPlease regenerate only this day's itinerary with improved activity suggestions.\n\nOnly output the list of activities, one per line, in the format: 08:00 AM - Activity Title: Short description. No commentary, no markdown, no bullet points, no extra text.`;
+  }
+
+  // Helper: Parse Gemini response (simple version, expects list of activities)
+  function parseReplannedActivities(text: string): Activity[] {
+    return text.split(/\n|\r/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => {
+        // Remove leading bullet or markdown characters
+        const cleaned = line.replace(/^[-*•]\s*/, "");
+        // Match time (with or without AM/PM), dash, title, colon, description
+        const match = cleaned.match(/^(\d{1,2}:\d{2}(?:\s*[APMapm]{2})?)\s*-\s*(.*?):\s*(.*)$/);
+        if (match) {
+          return { time: match[1].trim(), title: match[2].trim(), description: match[3].trim() };
+        }
+        return null;
+      })
+      .filter((a): a is Activity => Boolean(a));
+  }
+
+  // Helper: Diff activities
+  function getDiffActivities(original: Activity[], replanned: Activity[]): (Activity & { _diff: string })[] {
+    const origMap = new Map(original.map(a => [a.time + a.title, a]));
+    const replannedMap = new Map(replanned.map(a => [a.time + a.title, a]));
+    const result: (Activity & { _diff: string })[] = [];
+    for (const act of original) {
+      if (!replannedMap.has(act.time + act.title)) {
+        result.push({ ...act, _diff: 'removed' });
+      } else if (JSON.stringify(replannedMap.get(act.time + act.title)) !== JSON.stringify(act)) {
+        result.push({ ...replannedMap.get(act.time + act.title)!, _diff: 'changed' });
+      } else {
+        result.push({ ...act, _diff: 'unchanged' });
+      }
+    }
+    for (const act of replanned) {
+      if (!origMap.has(act.time + act.title)) {
+        result.push({ ...act, _diff: 'new' });
+      }
+    }
+    return result;
+  }
+
+  // Handler: Open replan modal
+  const handleOpenReplan = (idx: number) => {
+    setReplanModal({ open: true, dayIdx: idx });
+    setReplanReason("");
+    setReplanCustom("");
+    setReplanError(null);
+  };
+
+  // Handler: Submit replan
+  const handleReplanSubmit = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (replanModal.dayIdx == null) return;
+    setReplanLoading(true);
+    setReplanError(null);
+    try {
+      const user = getAuth().currentUser;
+      if (!user) {
+        setReplanError('You must be logged in to replan a day.');
+        setReplanLoading(false);
+        return;
+      }
+      const idToken = await user.getIdToken();
+      const prompt = await buildReplanPrompt(replanModal.dayIdx);
+      // Call Gemini API (replace with your endpoint)
+      const response = await fetch("/itinerary/replan-day", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ prompt })
+      });
+      const data = await response.json();
+      if (!data || !data.text) throw new Error("No response from AI");
+      const replanned = parseReplannedActivities(data.text);
+      if (!replanned.length) throw new Error("Could not parse replanned activities");
+      const original = itinerary.days[replanModal.dayIdx].activities;
+      setReplanDiff({ original, replanned });
+      setShowDiff(true);
+      setReplanModal({ open: false, dayIdx: null }); // Close replan modal when showing diff
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setReplanError(err.message);
+      } else {
+        setReplanError("Failed to replan day");
+      }
+    } finally {
+      setReplanLoading(false);
+    }
+  };
+
+  // Handler: Accept replanned day
+  const handleAcceptReplan = async () => {
+    console.log('[handleAcceptReplan] called');
+    toast({ title: 'Accept Changes clicked', description: 'Handler started.' });
+    if (!replanDiff || replanDiff.original == null || replanDiff.replanned == null) {
+      console.log('[handleAcceptReplan] Missing replanDiff');
+      return;
+    }
+    if (!itinerary) {
+      console.log('[handleAcceptReplan] No itinerary');
+      return;
+    }
+    // Find the day index by matching the original activities array
+    const dayIdx = itinerary.days.findIndex(day => day.activities === replanDiff.original);
+    // Fallback: if not found, use the last used dayIdx from replanModal (may be null)
+    const updateIdx = dayIdx !== -1 ? dayIdx : replanModal.dayIdx;
+    if (updateIdx == null) {
+      console.log('[handleAcceptReplan] No valid dayIdx');
+      return;
+    }
+    setAcceptingReplan(true);
+    // Deep copy the itinerary and days array to ensure React state updates
+    const newItinerary = JSON.parse(JSON.stringify(itinerary));
+    newItinerary.days[updateIdx].activities = replanDiff.replanned;
+    console.log('[handleAcceptReplan] About to setItinerary', newItinerary);
+    setItinerary(newItinerary);
+    try {
+      if (tripId && user) {
+        console.log('[handleAcceptReplan] About to call updateTrip', { tripId, userId: user.uid });
+        const groupIdFromParams = searchParams.get('groupId');
+        const updateData = {
+          destination,
+          duration,
+          budget,
+          travelers,
+          preferences,
+          itinerary: newItinerary,
+          ...(groupIdFromParams ? { groupId: groupIdFromParams } : {}),
+        };
+        const cleanedUpdateData = omitUndefined(updateData);
+        console.log('Final updateData:', cleanedUpdateData);
+        await updateTrip(user.uid, tripId, cleanedUpdateData);
+        console.log('[handleAcceptReplan] updateTrip success');
+        toast({ title: 'Day replanned!', description: 'The replanned day has been saved.' });
+      }
+    } catch (err) {
+      console.error('[handleAcceptReplan] updateTrip error', err);
+      toast({ title: 'Failed to save replanned day', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
+    } finally {
+      setAcceptingReplan(false);
+      console.log('[handleAcceptReplan] finished');
+      setShowDiff(false);
+      setReplanDiff(null);
+    }
+  };
+
+  // Handler: Discard replanned day
+  const handleDiscardReplan = () => {
+    setShowDiff(false);
+    setReplanDiff(null);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
@@ -1108,25 +1311,26 @@ const ItineraryGenerator: React.FC = () => {
                     itinerary.days.map((dayRaw, idx) => {
                       const day = dayRaw as { day: number; summary: string; lat?: number; lng?: number; activities: { time: string; title: string; description: string; lat?: number; lng?: number; }[] };
                       return (
-                        <div
-                          key={day.day}
-                          className="border border-gray-200 rounded-lg p-4"
-                        >
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="text-teal-600 font-bold text-lg">Day {day.day}: {day.summary}</span>
-                          </div>
-                          <ul className="list-none pl-0 space-y-2">
-                            {Array.isArray(day.activities) && day.activities.length > 0 ? (
-                              day.activities.map((act, i) => (
-                                <li key={i} className="flex items-start gap-2 text-gray-800">
-                                  <span className="font-bold">{act.time}</span>
-                                  <span className="font-semibold">{act.title}</span>: {act.description}
-                                </li>
-                              ))
-                            ) : (
-                              <li className="text-gray-500">No activities for this day.</li>
-                            )}
-                          </ul>
+                      <div
+                        key={day.day}
+                        className="border border-gray-200 rounded-lg p-4"
+                      >
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-teal-600 font-bold text-lg">Day {day.day}: {day.summary}</span>
+                            <Button size="sm" className="ml-2" onClick={() => handleOpenReplan(idx)}>Replan This Day</Button>
+                        </div>
+                        <ul className="list-none pl-0 space-y-2">
+                          {Array.isArray(day.activities) && day.activities.length > 0 ? (
+                            day.activities.map((act, i) => (
+                              <li key={i} className="flex items-start gap-2 text-gray-800">
+                                <span className="font-bold">{act.time}</span>
+                                <span className="font-semibold">{act.title}</span>: {act.description}
+                              </li>
+                            ))
+                          ) : (
+                            <li className="text-gray-500">No activities for this day.</li>
+                          )}
+                        </ul>
                           {/* Weather Forecast for this day */}
                           {day.lat !== undefined && day.lng !== undefined && (
                             <WeatherForecast
@@ -1135,7 +1339,7 @@ const ItineraryGenerator: React.FC = () => {
                               date={new Date(Date.now() + (day.day - 1) * 24 * 60 * 60 * 1000)}
                             />
                           )}
-                        </div>
+                      </div>
                       );
                     })
                   ) : (
@@ -1205,7 +1409,7 @@ const ItineraryGenerator: React.FC = () => {
                 <GroupBalanceSummary expenses={expenses} groupMembers={groupMembers} currentUser={user} userInfoMap={userInfoMap} />
                 {/* Add Expense Modal */}
                 <Dialog open={expenseModalOpen} onOpenChange={setExpenseModalOpen}>
-                  <DialogContent>
+                  <DialogContent className="max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Add Expense</DialogTitle>
                     </DialogHeader>
@@ -1502,7 +1706,7 @@ const ItineraryGenerator: React.FC = () => {
             )}
             {/* Packing List Modal */}
             <Dialog open={packingListModalOpen} onOpenChange={setPackingListModalOpen}>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Your Personalized Packing List</DialogTitle>
                   <DialogDescription>
@@ -1606,6 +1810,94 @@ const ItineraryGenerator: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Replan Modal */}
+      {showDiff && replanDiff && replanModal.dayIdx != null ? (
+        // Render ONLY the diff modal
+        <Dialog open={showDiff} onOpenChange={open => {
+          setShowDiff(open);
+          if (!open) {
+            setReplanDiff(null);
+            setReplanModal({ open: false, dayIdx: null });
+          }
+        }}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Compare Changes</DialogTitle>
+              <DialogDescription>Review the replanned day and accept or discard changes.</DialogDescription>
+            </DialogHeader>
+            <div className="flex gap-6">
+              <div className="flex-1">
+                <h4 className="font-semibold mb-2">Original</h4>
+                <ul className="space-y-2">
+                  {getDiffActivities(replanDiff.original, replanDiff.replanned).filter(a => a._diff !== 'new').map((act, i) => (
+                    <li key={i} className={act._diff === 'removed' ? 'text-gray-400 line-through' : act._diff === 'changed' ? 'bg-green-100 text-green-800 rounded px-2' : ''}>
+                      <span className="font-bold">{act.time}</span> <span className="font-semibold">{act.title}</span>: {act.description}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold mb-2">Replanned</h4>
+                <ul className="space-y-2">
+                  {getDiffActivities(replanDiff.original, replanDiff.replanned).filter(a => a._diff !== 'removed').map((act, i) => (
+                    <li key={i} className={act._diff === 'new' ? 'bg-blue-100 text-blue-800 rounded px-2' : act._diff === 'changed' ? 'bg-green-100 text-green-800 rounded px-2' : ''}>
+                      <span className="font-bold">{act.time}</span> <span className="font-semibold">{act.title}</span>: {act.description}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleDiscardReplan} variant="outline">Discard</Button>
+              <Button onClick={handleAcceptReplan} className="bg-teal-600 text-white" disabled={!replanDiff || replanModal.dayIdx == null || acceptingReplan}>{acceptingReplan ? 'Saving...' : 'Accept Changes'}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        // Otherwise, render the replan modal if open
+        <Dialog open={replanModal.open} onOpenChange={open => setReplanModal({ open, dayIdx: open ? replanModal.dayIdx : null })}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Replan Day {replanModal.dayIdx != null ? itinerary?.days[replanModal.dayIdx].day : ""}</DialogTitle>
+              <DialogDescription>
+                Select a reason or enter a custom prompt to replan this day.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Select value={replanReason} onValueChange={setReplanReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REPLAN_REASONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Textarea
+                value={replanCustom}
+                onChange={e => setReplanCustom(e.target.value)}
+                placeholder="Or enter a custom prompt (optional)"
+                className="w-full"
+                rows={3}
+              />
+              {replanError && <div className="text-red-600 text-sm">{replanError}</div>}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setReplanModal({ open: false, dayIdx: null })} variant="outline">Cancel</Button>
+              <Button onClick={handleReplanSubmit} disabled={replanLoading || (!replanReason && !replanCustom)}>
+                {replanLoading ? (
+                  <span className="flex items-center">
+                    <svg className="animate-spin h-4 w-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                    </svg>
+                    Replanning...
+                  </span>
+                ) : "Replan"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

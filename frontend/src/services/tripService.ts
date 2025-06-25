@@ -264,7 +264,7 @@ export const updateTrip = async (userId: string, tripId: string, tripData: SaveT
       tripId,
       userId,
       memberIds, // Add memberIds array for access control
-      groupId: tripData.groupId, // Keep groupId for reference
+      ...(tripData.groupId ? { groupId: tripData.groupId } : {}), // Only include groupId if non-empty
       tripData: JSON.stringify({
         ...tripData,
         updatedAt: new Date().toISOString(),
@@ -272,6 +272,7 @@ export const updateTrip = async (userId: string, tripId: string, tripData: SaveT
       updatedAt: new Date().toISOString(),
     };
 
+    console.log('[updateTrip] About to write tripDoc:', tripDoc);
     await setDoc(doc(db, 'trips', tripId), tripDoc, { merge: true });
   } catch (error) {
     console.error('Error updating trip:', error);
