@@ -1009,6 +1009,8 @@ const ItineraryGenerator: React.FC = () => {
   const [replanDiff, setReplanDiff] = useState<{ original: Activity[]; replanned: Activity[] } | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [acceptingReplan, setAcceptingReplan] = useState(false);
+  // Add this new state near other replan states
+  const [replanDiffDayIdx, setReplanDiffDayIdx] = useState<number | null>(null);
 
   // Helper: Build replan prompt
   async function buildReplanPrompt(dayIdx: number) {
@@ -1101,8 +1103,10 @@ const ItineraryGenerator: React.FC = () => {
       if (!replanned.length) throw new Error("Could not parse replanned activities");
       const original = itinerary.days[replanModal.dayIdx].activities;
       setReplanDiff({ original, replanned });
-      setShowDiff(true);
-      setReplanModal({ open: false, dayIdx: null }); // Close replan modal when showing diff
+      setReplanDiffDayIdx(replanModal.dayIdx); // Save the day index for the diff modal
+      setShowDiff(true); // Open diff modal
+      setReplanModal({ open: false, dayIdx: null }); // Close replan modal
+      // Do NOT navigate or reset page here
     } catch (err: unknown) {
       if (err instanceof Error) {
         setReplanError(err.message);
@@ -1129,7 +1133,7 @@ const ItineraryGenerator: React.FC = () => {
     // Find the day index by matching the original activities array
     const dayIdx = itinerary.days.findIndex(day => day.activities === replanDiff.original);
     // Fallback: if not found, use the last used dayIdx from replanModal (may be null)
-    const updateIdx = dayIdx !== -1 ? dayIdx : replanModal.dayIdx;
+    const updateIdx = dayIdx !== -1 ? dayIdx : replanDiffDayIdx;
     if (updateIdx == null) {
       console.log('[handleAcceptReplan] No valid dayIdx');
       return;
@@ -1167,6 +1171,7 @@ const ItineraryGenerator: React.FC = () => {
       console.log('[handleAcceptReplan] finished');
       setShowDiff(false);
       setReplanDiff(null);
+      setReplanDiffDayIdx(null);
     }
   };
 
@@ -1174,6 +1179,7 @@ const ItineraryGenerator: React.FC = () => {
   const handleDiscardReplan = () => {
     setShowDiff(false);
     setReplanDiff(null);
+    setReplanDiffDayIdx(null);
   };
 
   return (
@@ -1811,13 +1817,14 @@ const ItineraryGenerator: React.FC = () => {
         </DialogContent>
       </Dialog>
       {/* Replan Modal */}
-      {showDiff && replanDiff && replanModal.dayIdx != null ? (
+      {showDiff && replanDiff ? (
         // Render ONLY the diff modal
         <Dialog open={showDiff} onOpenChange={open => {
           setShowDiff(open);
           if (!open) {
             setReplanDiff(null);
             setReplanModal({ open: false, dayIdx: null });
+            setReplanDiffDayIdx(null);
           }
         }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -1848,8 +1855,14 @@ const ItineraryGenerator: React.FC = () => {
               </div>
             </div>
             <DialogFooter>
+              {/* Debug output for troubleshooting Accept Changes button */}
+              <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>
+                <div>replanDiff: {JSON.stringify(replanDiff)}</div>
+                <div>replanDiffDayIdx: {String(replanDiffDayIdx)}</div>
+                <div>acceptingReplan: {String(acceptingReplan)}</div>
+              </div>
               <Button onClick={handleDiscardReplan} variant="outline">Discard</Button>
-              <Button onClick={handleAcceptReplan} className="bg-teal-600 text-white" disabled={!replanDiff || replanModal.dayIdx == null || acceptingReplan}>{acceptingReplan ? 'Saving...' : 'Accept Changes'}</Button>
+              <Button onClick={handleAcceptReplan} className="bg-teal-600 text-white" disabled={!replanDiff || replanDiffDayIdx == null || acceptingReplan}>{acceptingReplan ? 'Saving...' : 'Accept Changes'}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
