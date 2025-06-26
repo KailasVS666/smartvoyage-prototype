@@ -8,6 +8,7 @@ import groupsRouter from './routes/groups';
 import admin from "firebase-admin";
 import path from "path";
 import tripsRouter from './routes/trips';
+import hotelsRouter from './routes/hotels';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -28,6 +29,7 @@ app.use(express.json());
 app.use("/itinerary", itineraryRouter);
 app.use('/groups', groupsRouter);
 app.use('/trips', tripsRouter);
+app.use('/api/hotels', hotelsRouter);
 
 app.get("/", (req, res) => {
   res.send("Backend is running");

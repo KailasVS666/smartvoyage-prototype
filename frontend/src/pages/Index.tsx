@@ -1,4 +1,3 @@
-
 import Navigation from "../components/Navigation";
 import Hero from "../components/Hero";
 import WhySmartVoyage from "../components/WhySmartVoyage";
@@ -9,6 +8,7 @@ import Testimonials from "../components/Testimonials";
 import CallToAction from "../components/CallToAction";
 import Footer from "../components/Footer";
 import ScrollToTop from "../components/ScrollToTop";
+  import HotelSearch from "../components/HotelSearch";
 
 const Index = () => {
   return (
@@ -16,6 +16,7 @@ const Index = () => {
       <Navigation />
       <main>
         <Hero />
+        <HotelSearch />
         <WhySmartVoyage />
         <FeaturedTours />
         <Features />
