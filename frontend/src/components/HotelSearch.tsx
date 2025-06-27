@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface HotelOffer {
   name: string;
@@ -51,6 +52,7 @@ const HotelSearch: React.FC = () => {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [selectedHotel, setSelectedHotel] = useState<HotelOffer & { source?: string } | null>(null);
   const [source, setSource] = useState<string | undefined>(undefined);
+  const navigate = useNavigate();
 
   const handleSearch = async () => {
     setLoading(true);
@@ -175,36 +177,20 @@ const HotelSearch: React.FC = () => {
           {!loading && offers.map((offer, idx) => (
             <Card
               key={idx}
-              className={`p-4 cursor-pointer transition-all duration-200 ${expanded === idx ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
-              onClick={() => setSelectedHotel({ ...offer, source })}
+              className={`p-4 cursor-pointer transition-all duration-200`}
+              onClick={() => navigate(`/hotel/${encodeURIComponent(offer.name)}`, { state: { hotel: { ...offer, source } } })}
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between">
                 <div>
                   <div className="font-semibold text-lg">{offer.name}</div>
-                  {expanded === idx && offer.address && (
-                    <div className="text-gray-600 text-sm mt-1">{offer.address}</div>
-                  )}
                 </div>
                 <div className="mt-2 md:mt-0 flex flex-col items-end">
                   <div className="font-bold text-primary">{offer.price ? `$${offer.price}` : 'N/A'}</div>
-                  {expanded === idx && offer.bookingLink && (
-                    <a
-                      href={offer.bookingLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 text-blue-600 underline text-sm"
-                    >
-                      Book Now
-                    </a>
-                  )}
                 </div>
               </div>
             </Card>
           ))}
         </div>
-        {selectedHotel && (
-          <HotelDetailsModal hotel={selectedHotel} onClose={() => setSelectedHotel(null)} />
-        )}
         {source && (
           <div className="text-xs text-gray-400 mt-2">Data source: {source}</div>
         )}

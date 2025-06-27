@@ -16,6 +16,7 @@ import NotFound from "./pages/NotFound";
 import ItineraryGenerator from "./pages/ItineraryGenerator";
 import SharedTripPage from "./pages/SharedTripPage";
 import MyTrips from "./pages/MyTrips";
+import HotelDetails from "./pages/HotelDetails";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/itinerary-generator" element={<ItineraryGenerator />} />
             <Route path="/shared/:tripId" element={<SharedTripPage />} />
             <Route path="/my-trips" element={<MyTrips />} />
+            <Route path="/hotel/:name" element={<HotelDetails />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </HashRouter>
