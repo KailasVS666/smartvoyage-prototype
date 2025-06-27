@@ -227,7 +227,7 @@ export async function getHotelOffers(
     return offerCache[cacheKey].data;
   }
   try {
-    const url = `https://test.api.amadeus.com/v1/reference-data/locations/hotels/by-city?cityCode=${encodeURIComponent(cityCode)}`;
+  const url = `https://test.api.amadeus.com/v1/reference-data/locations/hotels/by-city?cityCode=${encodeURIComponent(cityCode)}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (res.ok) {
       const data: any = await res.json();
@@ -281,7 +281,7 @@ export async function getHotelOffers(
       const url = `https://test.api.amadeus.com/v1/reference-data/locations/hotels/by-geocode?latitude=${coords.latitude}&longitude=${coords.longitude}&radius=10`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
-        const data: any = await res.json();
+  const data: any = await res.json();
         if (data.data && Array.isArray(data.data) && data.data.length > 0) {
           const hotelIds = data.data.map((hotel: any) => hotel.hotelId).slice(0, 20);
           const offersUrl = `https://test.api.amadeus.com/v3/shopping/hotel-offers?hotelIds=${hotelIds.join(',')}&checkInDate=${encodeURIComponent(checkIn)}&checkOutDate=${encodeURIComponent(checkOut)}&adults=${encodeURIComponent(adults)}`;
@@ -358,4 +358,4 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-export default router;
+export default router; 

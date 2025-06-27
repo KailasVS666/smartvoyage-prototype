@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, X, User, LogOut } from "lucide-react";
+import { Menu, X, User, LogOut, Heart } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import LoginButton from "./LoginButton";
@@ -23,6 +23,9 @@ const Navigation = () => {
   // Add My Trips link if user is authenticated
   if (user) {
     navLinks.splice(4, 0, { name: "My Trips", href: "/my-trips" });
+    navLinks.splice(5, 0, { name: "My Favorites", href: "/my-favorites", icon: Heart });
+  } else {
+    navLinks.splice(3, 0, { name: "My Favorites", href: "/my-favorites", icon: Heart });
   }
 
   const isActive = (href: string) => location.pathname === href;
@@ -60,6 +63,7 @@ const Navigation = () => {
                       : "text-gray-300 hover:text-teal-400"
                   }`}
                 >
+                  {link.icon && <link.icon className="inline h-4 w-4 mr-1 mb-0.5 text-pink-400" />}
                   {link.name}
                 </Link>
               ))}
@@ -120,6 +124,7 @@ const Navigation = () => {
                 }`}
                 onClick={() => setIsOpen(false)}
               >
+                {link.icon && <link.icon className="inline h-5 w-5 mr-2 mb-1 text-pink-400" />}
                 {link.name}
               </Link>
             ))}

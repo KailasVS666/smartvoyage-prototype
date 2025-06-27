@@ -2,6 +2,7 @@
   "dependencies": {
     "@firebasegen/default-connector": "file:dataconnect-generated/js/default-connector",
     "firebase": "^11.9.1",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "react-leaflet-cluster": "^2.1.0"
   }
 }
