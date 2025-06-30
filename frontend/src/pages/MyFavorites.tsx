@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/card';
 import { Heart, ArrowUp, Star } from 'lucide-react';
+import { toast } from "../components/ui/use-toast";
+import { useAuth } from "../contexts/AuthContext";
+import { getUserFavorites, setUserFavorites, addFavorite, removeFavorite } from "../services/favoriteService";
 
 interface HotelOffer {
   name: string;
@@ -41,15 +44,32 @@ const MyFavorites: React.FC = () => {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [showScroll, setShowScroll] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
-    try {
-      const favs = JSON.parse(localStorage.getItem('hotelFavorites') || '[]');
-      setFavorites(favs);
-    } catch {
-      setFavorites([]);
+    async function loadFavorites() {
+      setLoading(true);
+      if (user) {
+        try {
+          const favs = await getUserFavorites(user.uid);
+          setFavorites(favs);
+        } catch (err) {
+          toast({ title: "Error loading favorites", description: "Could not load your favorites from the cloud.", variant: "destructive" });
+          setFavorites([]);
+        }
+      } else {
+        try {
+          const favs = JSON.parse(localStorage.getItem('hotelFavorites') || '[]');
+          setFavorites(favs);
+        } catch {
+          setFavorites([]);
+        }
+      }
+      setLoading(false);
     }
-  }, []);
+    loadFavorites();
+    // eslint-disable-next-line
+  }, [user]);
 
   useEffect(() => {
     async function fetchHotels() {
@@ -65,7 +85,13 @@ const MyFavorites: React.FC = () => {
           if (Array.isArray(data.offers)) {
             hotels = hotels.concat(data.offers);
           }
-        } catch {}
+        } catch (err) {
+          toast({
+            title: "Error fetching hotels",
+            description: `Could not load hotels for city code ${cityCode}`,
+            variant: "destructive",
+          });
+        }
       }
       setFavoriteHotels(hotels.filter(h => favorites.includes(h.name)));
       setLoading(false);
@@ -74,11 +100,23 @@ const MyFavorites: React.FC = () => {
     else setLoading(false);
   }, [favorites]);
 
-  const removeFavorite = (hotelName: string) => {
-    const newFavs = favorites.filter(f => f !== hotelName);
-    setFavorites(newFavs);
-    localStorage.setItem('hotelFavorites', JSON.stringify(newFavs));
-    setFavoriteHotels(favoriteHotels.filter(h => h.name !== hotelName));
+  const removeFavoriteHandler = async (hotelName: string) => {
+    if (user) {
+      try {
+        await removeFavorite(user.uid, hotelName);
+        setFavorites(favs => favs.filter(f => f !== hotelName));
+        setFavoriteHotels(favoriteHotels.filter(h => h.name !== hotelName));
+        toast({ title: "Removed from Favorites", description: `${hotelName} has been removed from your favorites.` });
+      } catch {
+        toast({ title: "Error", description: "Failed to remove favorite from the cloud.", variant: "destructive" });
+      }
+    } else {
+      const newFavs = favorites.filter(f => f !== hotelName);
+      setFavorites(newFavs);
+      localStorage.setItem('hotelFavorites', JSON.stringify(newFavs));
+      setFavoriteHotels(favoriteHotels.filter(h => h.name !== hotelName));
+      toast({ title: "Removed from Favorites", description: `${hotelName} has been removed from your favorites.` });
+    }
   };
 
   // Scroll-to-top FAB visibility
@@ -123,9 +161,20 @@ const MyFavorites: React.FC = () => {
             <button
               className="rounded-md bg-white/10 hover:bg-white/20 text-white px-4 py-2 text-sm transition-all ring-1 ring-transparent hover:ring-white focus:ring-2 focus:ring-white focus:outline-none"
               onClick={() => {
-                setFavorites([]);
-                localStorage.setItem('hotelFavorites', '[]');
-                setFavoriteHotels([]);
+                if (user) {
+                  setFavorites([]);
+                  setFavoriteHotels([]);
+                  setUserFavorites(user.uid, []).then(() => {
+                    toast({ title: "All Favorites Cleared", description: "Your favorite hotels list is now empty." });
+                  }).catch(() => {
+                    toast({ title: "Error", description: "Failed to clear favorites from the cloud.", variant: "destructive" });
+                  });
+                } else {
+                  setFavorites([]);
+                  localStorage.setItem('hotelFavorites', '[]');
+                  setFavoriteHotels([]);
+                  toast({ title: "All Favorites Cleared", description: "Your favorite hotels list is now empty." });
+                }
               }}
               aria-label="Clear all favorites"
             >
@@ -192,7 +241,7 @@ const MyFavorites: React.FC = () => {
               <button
                 className="favorite-btn absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 hover:bg-white/10 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-white scale-110"
                 aria-label="Toggle Favorite"
-                onClick={e => { e.stopPropagation(); removeFavorite(hotel.name); }}
+                onClick={e => { e.stopPropagation(); removeFavoriteHandler(hotel.name); }}
                 tabIndex={0}
               >
                 <span className="relative block">

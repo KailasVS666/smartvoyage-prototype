@@ -12,6 +12,9 @@ import MarkerClusterGroup from 'react-leaflet-cluster';
 import { Dialog } from './ui/dialog';
 import { useIsMobile } from '../hooks/use-mobile';
 import { useEffect as useReactEffect } from 'react';
+import { toast } from "./ui/use-toast";
+import { useAuth } from "../contexts/AuthContext";
+import { getUserFavorites, addFavorite, removeFavorite } from "../services/favoriteService";
 
 interface HotelOffer {
   name: string;
@@ -84,23 +87,60 @@ const HotelSearch: React.FC = () => {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const priceSliderRef = useRef<HTMLDivElement>(null);
-  // Favorites state and toggle
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('hotelFavorites') || '[]');
-    } catch {
-      return [];
-    }
-  });
+  const { user } = useAuth();
+  const [favorites, setFavorites] = useState<string[]>([]);
+  // Sync favorites with Firestore/localStorage on mount or user change
   useEffect(() => {
-    localStorage.setItem('hotelFavorites', JSON.stringify(favorites));
-  }, [favorites]);
-  const toggleFavorite = (hotelName: string) => {
-    setFavorites(favs =>
-      favs.includes(hotelName)
-        ? favs.filter(f => f !== hotelName)
-        : [...favs, hotelName]
-    );
+    async function loadFavorites() {
+      if (user) {
+        try {
+          const favs = await getUserFavorites(user.uid);
+          setFavorites(favs);
+        } catch {
+          setFavorites([]);
+        }
+      } else {
+        try {
+          const favs = JSON.parse(localStorage.getItem('hotelFavorites') || '[]');
+          setFavorites(favs);
+        } catch {
+          setFavorites([]);
+        }
+      }
+    }
+    loadFavorites();
+    // eslint-disable-next-line
+  }, [user]);
+  // Toggle favorite handler
+  const toggleFavorite = async (hotelName: string) => {
+    if (user) {
+      try {
+        if (favorites.includes(hotelName)) {
+          await removeFavorite(user.uid, hotelName);
+          setFavorites(favs => favs.filter(f => f !== hotelName));
+          toast({ title: "Removed from Favorites", description: `${hotelName} has been removed from your favorites.` });
+        } else {
+          await addFavorite(user.uid, hotelName);
+          setFavorites(favs => [...favs, hotelName]);
+          toast({ title: "Added to Favorites", description: `${hotelName} has been added to your favorites!` });
+        }
+      } catch {
+        toast({ title: "Error", description: "Failed to update favorites in the cloud.", variant: "destructive" });
+      }
+    } else {
+      setFavorites(favs => {
+        let newFavs;
+        if (favs.includes(hotelName)) {
+          newFavs = favs.filter(f => f !== hotelName);
+          toast({ title: "Removed from Favorites", description: `${hotelName} has been removed from your favorites.` });
+        } else {
+          newFavs = [...favs, hotelName];
+          toast({ title: "Added to Favorites", description: `${hotelName} has been added to your favorites!` });
+        }
+        localStorage.setItem('hotelFavorites', JSON.stringify(newFavs));
+        return newFavs;
+      });
+    }
   };
 
   // For amenities options
