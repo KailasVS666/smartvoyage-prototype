@@ -5,6 +5,8 @@ import { Heart, ArrowUp, Star } from 'lucide-react';
 import { toast } from "../components/ui/use-toast";
 import { useAuth } from "../contexts/AuthContext";
 import { getUserFavorites, setUserFavorites, addFavorite, removeFavorite } from "../services/favoriteService";
+import Navigation from "../components/Navigation";
+import { Skeleton } from '../components/ui/skeleton';
 
 interface HotelOffer {
   name: string;
@@ -54,7 +56,9 @@ const MyFavorites: React.FC = () => {
           const favs = await getUserFavorites(user.uid);
           setFavorites(favs);
         } catch (err) {
-          toast({ title: "Error loading favorites", description: "Could not load your favorites from the cloud.", variant: "destructive" });
+          if (favorites.length === 0) {
+            toast({ title: "Error loading favorites", description: "Could not load your favorites from the cloud.", variant: "destructive" });
+          }
           setFavorites([]);
         }
       } else {
@@ -133,22 +137,32 @@ const MyFavorites: React.FC = () => {
     return matchesSearch && matchesCategory;
   });
 
+  // Batch select state (must come after filteredHotels)
+  const [selected, setSelected] = useState<string[]>([]);
+  const allSelected = filteredHotels.length > 0 && selected.length === filteredHotels.length;
+
+  // Batch remove handler
+  const handleBatchRemove = async () => {
+    if (selected.length === 0) return;
+    if (user) {
+      for (const hotelName of selected) {
+        await removeFavorite(user.uid, hotelName);
+      }
+      setFavorites(favs => favs.filter(f => !selected.includes(f)));
+      setFavoriteHotels(favoriteHotels.filter(h => !selected.includes(h.name)));
+    } else {
+      const newFavs = favorites.filter(f => !selected.includes(f));
+      setFavorites(newFavs);
+      localStorage.setItem('hotelFavorites', JSON.stringify(newFavs));
+      setFavoriteHotels(favoriteHotels.filter(h => !selected.includes(h.name)));
+    }
+    setSelected([]);
+    toast({ title: "Removed Selected Favorites", description: `${selected.length} hotel(s) removed from your favorites.` });
+  };
+
   return (
     <div className="min-h-screen bg-black text-white px-4 py-8 max-w-5xl mx-auto space-y-8">
-      {/* Sticky Glassmorphic Navigation Bar */}
-      <nav className="backdrop-blur-md bg-black/60 border-b border-white/10 shadow-md z-50 sticky top-0 flex justify-between items-center px-6 py-4">
-        <div className="flex items-center gap-2">
-          <span className="text-white font-bold text-lg tracking-wide">SmartVoyage</span>
-        </div>
-        <div className="flex gap-6 items-center">
-          <a href="/" className="text-white hover:text-gray-300 text-sm md:text-base transition-colors">Home</a>
-          <a href="/explore" className="text-white hover:text-gray-300 text-sm md:text-base transition-colors">Explore</a>
-          <a href="/plan" className="text-white hover:text-gray-300 text-sm md:text-base transition-colors">Planner</a>
-          <a href="/my-favorites" className="text-white font-bold underline underline-offset-4 text-sm md:text-base transition-colors">My Favorites</a>
-          <a href="/about" className="text-white hover:text-gray-300 text-sm md:text-base transition-colors">About</a>
-          <button className="text-white hover:text-gray-300 text-sm md:text-base transition-colors">Logout</button>
-        </div>
-      </nav>
+      <Navigation />
       {/* Heading Section */}
       <section className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
@@ -208,87 +222,140 @@ const MyFavorites: React.FC = () => {
       </section>
       {/* Hotel Cards or Empty State */}
       {loading ? (
-        <div className="text-center text-gray-400 py-12">Loading favorites...</div>
-      ) : filteredHotels.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 animate-fade-in space-y-4">
-          <span className="text-4xl text-white/30">💔</span>
-          <div className="text-gray-400 text-center text-lg">You haven't added any favorites yet.</div>
-          <a href="/explore" className="text-blue-400 underline hover:text-blue-300 transition text-sm">Start exploring hotels now →</a>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredHotels.map((hotel, idx) => (
-            <div
-              key={idx}
-              className="relative bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl shadow-md shadow-white/10 p-4 transition-transform hover:scale-[1.02] hover:shadow-white/20 animate-fade-in flex flex-col justify-between h-full group cursor-pointer focus-within:ring-2 focus-within:ring-white"
-              tabIndex={0}
-              aria-label={`View details for ${hotel.name}`}
-              onClick={e => {
-                if ((e.target as HTMLElement).closest('.favorite-btn, .compare-toggle')) return;
-                navigate(`/hotel/${encodeURIComponent(hotel.name)}`, { state: { hotel } });
-              }}
-            >
-              {/* Hotel Image */}
-              {hotel.imageUrl || (hotel.images && hotel.images[0]) ? (
-                <img
-                  src={hotel.imageUrl || hotel.images?.[0]}
-                  alt={hotel.name}
-                  className="w-full aspect-video object-cover rounded-xl mb-4 bg-black/20"
-                  loading="lazy"
-                />
-              ) : null}
-              {/* Heart Icon */}
-              <button
-                className="favorite-btn absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 hover:bg-white/10 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-white scale-110"
-                aria-label="Toggle Favorite"
-                onClick={e => { e.stopPropagation(); removeFavoriteHandler(hotel.name); }}
-                tabIndex={0}
-              >
-                <span className="relative block">
-                  <Heart className="h-7 w-7 fill-pink-500 text-pink-500 transition-transform duration-200" fill="#ec4899" />
-                  {/* Animate ping on remove */}
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-40 animate-ping top-0 left-0 pointer-events-none" style={{ display: 'none' }}></span>
-                </span>
-              </button>
-              {/* Hotel Info */}
-              <div className="flex flex-col gap-2 flex-1">
-                <div className="text-white font-semibold text-base md:text-lg truncate" title={hotel.name}>{hotel.name}</div>
-                {hotel.rating && (
-                  <div className="flex items-center gap-1 text-yellow-400 text-sm">
-                    <Star className="h-4 w-4" />
-                    <span>{hotel.rating}</span>
-                  </div>
-                )}
-                {hotel.address && <div className="text-gray-400 text-sm truncate">{hotel.address}</div>}
-                <div className="text-white font-bold text-lg mt-1">{hotel.price ? `$${hotel.price}` : 'N/A'}</div>
-                {/* Amenities badges (optional) */}
-                {hotel.amenities && hotel.amenities.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {hotel.amenities.slice(0, 4).map((a, i) => (
-                      <span key={i} className="bg-white/10 text-white text-xs px-2 py-1 rounded-full tracking-wide">{a}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {/* Compare Toggle (Optional, UI only) */}
-              <div className="flex justify-end mt-4">
-                <label className="flex items-center gap-2 cursor-pointer compare-toggle select-none">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    aria-label="Add to comparison"
-                    tabIndex={0}
-                    readOnly
-                  />
-                  <div className="w-10 h-5 bg-white/10 rounded-full peer-checked:bg-white transition duration-300 relative">
-                    <div className="w-4 h-4 bg-white absolute top-0.5 left-0.5 rounded-full transition peer-checked:translate-x-5"></div>
-                  </div>
-                  <span className="text-xs text-white">Compare</span>
-                </label>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 py-12">
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <div key={idx} className="flex flex-col gap-4">
+              <Skeleton className="w-full aspect-video rounded-xl mb-4 bg-gray-800" />
+              <Skeleton className="h-6 w-3/4 rounded bg-gray-700" />
+              <Skeleton className="h-4 w-1/2 rounded bg-gray-700" />
+              <Skeleton className="h-4 w-1/3 rounded bg-gray-700" />
+              <Skeleton className="h-8 w-24 rounded-full bg-gray-700 mt-2" />
             </div>
           ))}
         </div>
+      ) : filteredHotels.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 animate-fade-in space-y-4">
+          <img src="/public/placeholder.svg" alt="No favorites" className="w-32 h-32 opacity-60 mb-2" />
+          <div className="text-gray-400 text-center text-lg font-semibold">You haven't added any favorites yet.</div>
+          <a href="/explore" className="inline-block bg-gradient-to-r from-teal-400 to-pink-400 text-black font-bold px-6 py-3 rounded-full shadow-lg hover:scale-105 transition-transform focus:outline-none focus:ring-4 focus:ring-pink-300 animate-bounce mt-2">
+            Start exploring hotels now →
+          </a>
+        </div>
+      ) : (
+        <>
+          {/* Batch Remove Controls */}
+          <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-2 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={e => setSelected(e.target.checked ? filteredHotels.map(h => h.name) : [])}
+                aria-label="Select all favorites"
+                className="accent-pink-500 w-5 h-5 rounded focus:ring-2 focus:ring-pink-400"
+              />
+              <span className="text-sm text-white">Select All</span>
+            </div>
+            <button
+              className="bg-pink-500 hover:bg-pink-400 text-white font-bold py-2 px-4 rounded-full shadow disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleBatchRemove}
+              disabled={selected.length === 0}
+              aria-label="Remove selected favorites"
+            >
+              Remove Selected
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredHotels.map((hotel, idx) => (
+              <div
+                key={idx}
+                className="relative bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl shadow-md shadow-white/10 p-4 transition-transform hover:scale-[1.02] hover:shadow-white/20 animate-fade-in flex flex-col justify-between h-full group focus-within:ring-2 focus-within:ring-white"
+                tabIndex={0}
+                aria-label={`Hotel card for ${hotel.name}`}
+                role="group"
+              >
+                {/* Batch Select Checkbox */}
+                <input
+                  type="checkbox"
+                  checked={selected.includes(hotel.name)}
+                  onChange={e => {
+                    setSelected(sel => e.target.checked ? [...sel, hotel.name] : sel.filter(n => n !== hotel.name));
+                  }}
+                  aria-label={`Select ${hotel.name}`}
+                  className="absolute top-4 left-4 z-10 accent-pink-500 w-5 h-5 rounded focus:ring-2 focus:ring-pink-400 bg-black/40"
+                  tabIndex={0}
+                />
+                {/* Hotel Image */}
+                {hotel.imageUrl || (hotel.images && hotel.images[0]) ? (
+                  <img
+                    src={hotel.imageUrl || hotel.images?.[0]}
+                    alt={hotel.name}
+                    className="w-full aspect-video object-cover rounded-xl mb-4 bg-black/20"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-full aspect-video rounded-xl mb-4 bg-gray-800 flex items-center justify-center text-4xl text-gray-500" aria-label="No image available">🏨</div>
+                )}
+                {/* Heart Icon */}
+                <button
+                  className="favorite-btn absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 hover:bg-white/10 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-white scale-110"
+                  aria-label={`Remove ${hotel.name} from Favorites`}
+                  onClick={e => { e.stopPropagation(); removeFavoriteHandler(hotel.name); }}
+                  tabIndex={0}
+                  role="button"
+                >
+                  <span className="relative block">
+                    <Heart className="h-7 w-7 fill-pink-500 text-pink-500 transition-transform duration-200" fill="#ec4899" />
+                  </span>
+                </button>
+                {/* Hotel Info */}
+                <div className="flex flex-col gap-2 flex-1">
+                  <div className="text-white font-semibold text-base md:text-lg truncate" title={hotel.name}>{hotel.name}</div>
+                  {hotel.rating && (
+                    <div className="flex items-center gap-1 text-yellow-400 text-sm">
+                      <Star className="h-4 w-4" />
+                      <span>{hotel.rating}</span>
+                    </div>
+                  )}
+                  {hotel.address && <div className="text-gray-400 text-sm truncate">{hotel.address}</div>}
+                  <div className="text-white font-bold text-lg mt-1">{hotel.price ? `$${hotel.price}` : 'N/A'}</div>
+                  {/* Amenities badges (optional) */}
+                  {hotel.amenities && hotel.amenities.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {hotel.amenities.slice(0, 4).map((a, i) => (
+                        <span key={i} className="bg-white/10 text-white text-xs px-2 py-1 rounded-full tracking-wide">{a}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* View Details Button */}
+                <div className="flex flex-col sm:flex-row justify-end mt-4 gap-2">
+                  <button
+                    className="bg-gradient-to-r from-teal-400 to-pink-400 text-black font-bold py-2 px-4 rounded-full shadow hover:scale-105 transition-transform focus:outline-none focus:ring-2 focus:ring-pink-300"
+                    onClick={() => navigate(`/hotel/${encodeURIComponent(hotel.name)}`, { state: { hotel } })}
+                    aria-label={`View details for ${hotel.name}`}
+                    role="button"
+                  >
+                    View Details
+                  </button>
+                  {/* Compare Toggle (Optional, UI only) */}
+                  <label className="flex items-center gap-2 cursor-pointer compare-toggle select-none ml-0 sm:ml-4 mt-2 sm:mt-0">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      aria-label="Add to comparison"
+                      tabIndex={0}
+                      readOnly
+                    />
+                    <div className="w-10 h-5 bg-white/10 rounded-full peer-checked:bg-white transition duration-300 relative">
+                      <div className="w-4 h-4 bg-white absolute top-0.5 left-0.5 rounded-full transition peer-checked:translate-x-5"></div>
+                    </div>
+                    <span className="text-xs text-white">Compare</span>
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
       {/* Scroll to Top FAB */}
       {showScroll && (

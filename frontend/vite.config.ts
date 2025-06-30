@@ -23,5 +23,17 @@ export default defineConfig(({ mode }) => ({
   // Ensure proper SPA handling
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          firebase: [
+            'firebase/app',
+            'firebase/auth',
+            'firebase/firestore',
+            // add other firebase modules here if needed
+          ],
+        },
+      },
+    },
   },
 }));

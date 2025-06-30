@@ -1,5 +1,5 @@
-
 import { Star } from "lucide-react";
+import { useScrollReveal } from '../hooks/useScrollReveal';
 
 const Testimonials = () => {
   const testimonials = [
@@ -26,6 +26,14 @@ const Testimonials = () => {
     }
   ];
 
+  // Scroll reveal wrapper for testimonial cards
+  const ScrollRevealCard: React.FC<{ children: React.ReactNode; delay?: number }> = ({ children, delay = 0 }) => {
+    const ref = useScrollReveal('animate-fade-in-up', delay) as React.RefObject<HTMLDivElement>;
+    return (
+      <div ref={ref}>{children}</div>
+    );
+  };
+
   return (
     <section id="testimonials" className="py-20 bg-black">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -39,34 +47,36 @@ const Testimonials = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {testimonials.map((testimonial, index) => (
-            <div
-              key={index}
-              className="bg-gray-900 p-8 rounded-lg border border-gray-800 hover:border-teal-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-teal-500/10"
-            >
-              {/* Rating Stars */}
-              <div className="flex mb-4">
-                {[...Array(testimonial.rating)].map((_, i) => (
-                  <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                ))}
-              </div>
+          {testimonials.map((testimonial, idx) => (
+            <ScrollRevealCard key={idx} delay={idx * 80}>
+              <div
+                className="bg-gray-900 p-8 rounded-lg border border-gray-800 hover:border-teal-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-teal-500/10"
+              >
+                {/* Rating Stars */}
+                <div className="flex mb-4">
+                  {[...Array(testimonial.rating)].map((_, i) => (
+                    <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
+                  ))}
+                </div>
 
-              <blockquote className="text-gray-300 mb-6 text-lg leading-relaxed">
-                "{testimonial.quote}"
-              </blockquote>
+                <blockquote className="text-gray-300 mb-6 text-lg leading-relaxed">
+                  "{testimonial.quote}"
+                </blockquote>
 
-              <div className="flex items-center">
-                <img
-                  src={testimonial.image}
-                  alt={testimonial.name}
-                  className="w-12 h-12 rounded-full mr-4 border-2 border-teal-500/30"
-                />
-                <div>
-                  <div className="text-white font-semibold">{testimonial.name}</div>
-                  <div className="text-teal-400 text-sm">{testimonial.role}</div>
+                <div className="flex items-center">
+                  <img
+                    src={testimonial.image}
+                    alt={testimonial.name}
+                    className="w-12 h-12 rounded-full mr-4 border-2 border-teal-500/30"
+                    loading="lazy"
+                  />
+                  <div>
+                    <div className="text-white font-semibold">{testimonial.name}</div>
+                    <div className="text-teal-400 text-sm">{testimonial.role}</div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </ScrollRevealCard>
           ))}
         </div>
       </div>

@@ -11,7 +11,13 @@ const Navigation = () => {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  const navLinks = [
+  type NavLink = {
+    name: string;
+    href: string;
+    icon?: React.ElementType;
+  };
+
+  const navLinks: NavLink[] = [
     { name: "Home", href: "/" },
     { name: "Explore", href: "/tours" },
     { name: "Planner", href: "/plan" },

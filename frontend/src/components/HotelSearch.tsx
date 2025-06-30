@@ -15,6 +15,10 @@ import { useEffect as useReactEffect } from 'react';
 import { toast } from "./ui/use-toast";
 import { useAuth } from "../contexts/AuthContext";
 import { getUserFavorites, addFavorite, removeFavorite } from "../services/favoriteService";
+import { HotelCardSkeleton } from './ui/skeleton';
+import { useInView } from 'react-intersection-observer';
+import { RecentlyViewed } from './RecentlyViewed';
+import { useScrollReveal } from '../hooks/useScrollReveal';
 
 interface HotelOffer {
   name: string;
@@ -64,6 +68,8 @@ const HotelDetailsModal: React.FC<{
   </div>
 );
 
+const ITEMS_PER_PAGE = 12;
+
 const HotelSearch: React.FC = () => {
   const [cityCode, setCityCode] = useState('');
   const [checkIn, setCheckIn] = useState('');
@@ -89,6 +95,10 @@ const HotelSearch: React.FC = () => {
   const priceSliderRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const { ref: loadMoreRef, inView } = useInView();
+
   // Sync favorites with Firestore/localStorage on mount or user change
   useEffect(() => {
     async function loadFavorites() {
@@ -166,12 +176,21 @@ const HotelSearch: React.FC = () => {
     localStorage.setItem('hotelFilters', JSON.stringify({ priceRange, starRatings, amenities, onlyAvailable, sortBy }));
   }, [priceRange, starRatings, amenities, onlyAvailable, sortBy]);
 
+  // Load more items when the load more div comes into view
+  useEffect(() => {
+    if (inView && hasMore && !loading) {
+      setPage(p => p + 1);
+    }
+  }, [inView, hasMore, loading]);
+
   const handleSearch = async () => {
     setLoading(true);
     setError(null);
     setOffers([]);
     setExpanded(null);
     setSource(undefined);
+    setPage(1);
+    setHasMore(true);
     try {
       const params = new URLSearchParams({
         cityCode,
@@ -286,12 +305,28 @@ const HotelSearch: React.FC = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [compareOpen]);
 
+  // Pagination logic
+  const paginatedOffers = sortedOffers.slice(0, page * ITEMS_PER_PAGE);
+  useEffect(() => {
+    setHasMore(paginatedOffers.length < sortedOffers.length);
+  }, [paginatedOffers.length, sortedOffers.length]);
+
+  // Scroll reveal wrapper for hotel cards
+  const ScrollRevealCard: React.FC<{ children: React.ReactNode; delay?: number }> = ({ children, delay = 0 }) => {
+    const ref = useScrollReveal('animate-fade-in-up', delay) as React.RefObject<HTMLDivElement>;
+    return (
+      <div ref={ref}>
+        {children}
+      </div>
+    );
+  };
+
   return (
     <TooltipProvider>
       <div className="min-h-screen bg-gradient-to-b from-black via-gray-900 to-black flex flex-col items-center justify-start py-12 px-2 space-y-8">
         {/* Search Card */}
         <div className="w-full max-w-4xl mx-auto mb-8">
-          <div className="rounded-2xl backdrop-blur-md bg-white/10 border border-white/20 shadow-2xl p-8 transition-all duration-300 ease-in-out animate-fade-in-up">
+          <div className="rounded-2xl backdrop-blur-md bg-white/10 border border-white/20 shadow-2xl p-8 transition-all duration-300 ease-in-out animate-slide-in-left">
             <form className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* City Code */}
               <div className="relative">
@@ -351,7 +386,7 @@ const HotelSearch: React.FC = () => {
               </div>
             </form>
             <Button
-              className="mt-8 w-full bg-white text-black hover:bg-gray-100 rounded-lg px-4 py-2 shadow-md transition-colors duration-200 text-base font-semibold flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-white active:scale-95 tracking-wide"
+              className="mt-8 w-full bg-white text-black hover:bg-gray-100 hover:animate-scale rounded-lg px-4 py-2 shadow-md transition-colors duration-200 text-base font-semibold flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-white active:scale-95 tracking-wide"
               onClick={handleSearch}
               disabled={loading}
               aria-label="Search Hotels"
@@ -359,7 +394,7 @@ const HotelSearch: React.FC = () => {
             >
               <Search className="h-5 w-5" />
               {loading ? (
-                <span className="flex items-center justify-center"><Loader2 className="animate-spin mr-2 h-4 w-4" />Searching...</span>
+                <span className="flex items-center justify-center"><Loader2 className="animate-rotate mr-2 h-4 w-4" />Searching...</span>
               ) : 'Search Hotels'}
             </Button>
             {error && <div className="text-red-500 mt-2 text-center text-sm tracking-wide" aria-live="polite">{error}</div>}
@@ -618,7 +653,7 @@ const HotelSearch: React.FC = () => {
         </div>
         {/* Sticky compare bar */}
         {compare.length >= 2 && (
-          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-900 shadow-lg rounded-full flex items-center gap-2 px-4 py-2 animate-fade-in-up border border-gray-300 dark:border-gray-700">
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-900 shadow-lg rounded-full flex items-center gap-2 px-4 py-2 animate-slide-in-right border border-gray-300 dark:border-gray-700">
             <span className="font-semibold text-sm text-gray-800 dark:text-gray-100">Compare:</span>
             {compareHotels.map(h => (
               <span key={h.name} className="flex items-center gap-1 bg-gray-200 dark:bg-gray-800 rounded px-2 py-1 text-xs font-medium">
@@ -627,7 +662,7 @@ const HotelSearch: React.FC = () => {
               </span>
             ))}
             <button
-              className="ml-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded-full font-semibold transition"
+              className="ml-2 bg-blue-600 hover:bg-blue-700 hover:animate-wiggle text-white px-4 py-1 rounded-full font-semibold transition"
               onClick={() => setCompareOpen(true)}
             >Compare</button>
             <button
@@ -636,90 +671,111 @@ const HotelSearch: React.FC = () => {
             >Clear</button>
           </div>
         )}
+        {/* Recently Viewed Section */}
+        <RecentlyViewed />
         {/* Results: List or Map */}
         {viewMode === 'list' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-6xl mx-auto">
-          {loading && (
-            <div className="flex justify-center py-8 col-span-full">
-              <Loader2 className="animate-spin h-8 w-8 text-primary" />
-            </div>
-          )}
-          {!loading && sortedOffers.length === 0 && !error && (
-            <div className="text-center text-gray-500 col-span-full">No hotels found. Try adjusting your filters.</div>
-          )}
-          {!loading && sortedOffers.map((offer, idx) => (
-            <div
-              key={idx}
-              className="relative bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 md:p-6 shadow-md shadow-white/10 transition-transform duration-300 ease-in-out hover:scale-[1.02] focus-within:ring-2 focus-within:ring-white group cursor-pointer animate-fade-in-up"
-              tabIndex={0}
-              aria-label={`View details for ${offer.name}`}
-              onClick={e => {
-                if ((e.target as HTMLElement).closest('.favorite-btn, .compare-toggle')) return;
-                navigate(`/hotel/${encodeURIComponent(offer.name)}`, { state: { hotel: { ...offer, source } } });
-              }}
-            >
-              {/* Hotel Image */}
-              {offer.imageUrl || (offer.images && offer.images[0]) ? (
-                <img
-                  src={offer.imageUrl || offer.images?.[0]}
-                  alt={offer.name}
-                  className="w-full aspect-[3/2] object-cover rounded-xl mb-4 bg-black/20"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="w-full aspect-[3/2] rounded-xl mb-4 bg-black/30 flex items-center justify-center text-gray-500 text-lg">No image</div>
-              )}
-              {/* Favorite Icon */}
-              <button
-                className={`favorite-btn absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 hover:bg-white/10 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-white ${favorites.includes(offer.name) ? 'scale-110' : ''}`}
-                aria-label={favorites.includes(offer.name) ? 'Remove from favorites' : 'Add to favorites'}
-                onClick={e => { e.stopPropagation(); toggleFavorite(offer.name); }}
-                tabIndex={0}
-              >
-                <Heart
-                  className={`h-7 w-7 ${favorites.includes(offer.name) ? 'fill-white text-white' : 'text-gray-400 group-hover:text-white'}`}
-                  fill={favorites.includes(offer.name) ? '#fff' : 'none'}
-                />
-              </button>
-              {/* Info Section */}
-              <div className="flex flex-col gap-2">
-                <div className="text-white font-semibold text-lg md:text-xl truncate" title={offer.name}>{offer.name}</div>
-                <div className="text-white/80 text-sm">{offer.price ? `$${offer.price}` : 'N/A'}</div>
-                {offer.rating && (
-                  <div className="flex items-center gap-1 text-yellow-400 text-sm">
-                    <span>{'★'.repeat(Math.round(offer.rating))}</span>
-                    <span className="text-white/80 ml-1">{offer.rating}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-6xl mx-auto">
+            {loading && page === 1 && (
+              <>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <HotelCardSkeleton />
                   </div>
-                )}
-                {offer.amenities && offer.amenities.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {offer.amenities.slice(0, 6).map((a, i) => (
-                      <span key={i} className="px-3 py-1 bg-white/10 text-white text-xs rounded-full font-medium shadow-inner border border-white/20">{a}</span>
-                    ))}
-                    {offer.amenities.length > 6 && <span className="text-xs text-gray-400">+{offer.amenities.length - 6} more</span>}
-                  </div>
-                )}
-              </div>
-              {/* Compare Toggle */}
-              <div className="flex justify-end mt-4">
-                <label className="flex items-center gap-2 cursor-pointer compare-toggle select-none">
-                  <input
-                    type="checkbox"
-                    checked={compare.includes(offer.name)}
-                    onChange={e => { e.stopPropagation(); toggleCompare(offer.name); }}
-                    className="sr-only peer"
-                    aria-label={compare.includes(offer.name) ? 'Remove from comparison' : 'Add to comparison'}
+                ))}
+              </>
+            )}
+            {!loading && paginatedOffers.length === 0 && !error && (
+              <div className="text-center text-gray-500 col-span-full">No hotels found. Try adjusting your filters.</div>
+            )}
+            {!loading && paginatedOffers.map((offer, idx) => (
+              <ScrollRevealCard key={idx} delay={idx * 60}>
+                <div
+                  className="relative bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 md:p-6 shadow-md shadow-white/10 transition-transform duration-300 ease-in-out hover:scale-[1.02] focus-within:ring-2 focus-within:ring-white group cursor-pointer"
+                  tabIndex={0}
+                  aria-label={`View details for ${offer.name}`}
+                  onClick={e => {
+                    if ((e.target as HTMLElement).closest('.favorite-btn, .compare-toggle')) return;
+                    navigate(`/hotel/${encodeURIComponent(offer.name)}`, { state: { hotel: { ...offer, source } } });
+                  }}
+                >
+                  {/* Hotel Image */}
+                  {offer.imageUrl || (offer.images && offer.images[0]) ? (
+                    <img
+                      src={offer.imageUrl || offer.images?.[0]}
+                      alt={offer.name}
+                      className="w-full aspect-[3/2] object-cover rounded-xl mb-4 bg-black/20"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full aspect-[3/2] rounded-xl mb-4 bg-black/30 flex items-center justify-center text-gray-500 text-lg">No image</div>
+                  )}
+                  {/* Favorite Icon */}
+                  <button
+                    className={`favorite-btn absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 hover:bg-white/10 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-white ${favorites.includes(offer.name) ? 'scale-110 animate-bounce' : ''}`}
+                    aria-label={favorites.includes(offer.name) ? 'Remove from favorites' : 'Add to favorites'}
+                    onClick={e => { e.stopPropagation(); toggleFavorite(offer.name); }}
                     tabIndex={0}
-                  />
-                  <div className="w-10 h-5 bg-white/10 rounded-full peer-checked:bg-white transition duration-300 relative">
-                    <div className="w-4 h-4 bg-white absolute top-0.5 left-0.5 rounded-full transition peer-checked:translate-x-5"></div>
+                  >
+                    <Heart
+                      className={`h-7 w-7 ${favorites.includes(offer.name) ? 'fill-white text-white' : 'text-gray-400 group-hover:text-white'}`}
+                      fill={favorites.includes(offer.name) ? '#fff' : 'none'}
+                    />
+                  </button>
+                  {/* Info Section */}
+                  <div className="flex flex-col gap-2">
+                    <div className="text-white font-semibold text-lg md:text-xl truncate" title={offer.name}>{offer.name}</div>
+                    <div className="text-white/80 text-sm">{offer.price ? `$${offer.price}` : 'N/A'}</div>
+                    {offer.rating && (
+                      <div className="flex items-center gap-1 text-yellow-400 text-sm">
+                        <span>{'★'.repeat(Math.round(offer.rating))}</span>
+                        <span className="text-white/80 ml-1">{offer.rating}</span>
+                      </div>
+                    )}
+                    {offer.amenities && offer.amenities.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {offer.amenities.slice(0, 6).map((a, i) => (
+                          <span key={i} className="px-3 py-1 bg-white/10 text-white text-xs rounded-full font-medium shadow-inner border border-white/20">{a}</span>
+                        ))}
+                        {offer.amenities.length > 6 && <span className="text-xs text-gray-400">+{offer.amenities.length - 6} more</span>}
+                      </div>
+                    )}
                   </div>
-                  <span className="text-xs text-white">Compare</span>
-                </label>
+                  {/* Compare Toggle */}
+                  <div className="flex justify-end mt-4">
+                    <label className="flex items-center gap-2 cursor-pointer compare-toggle select-none">
+                      <input
+                        type="checkbox"
+                        checked={compare.includes(offer.name)}
+                        onChange={e => { e.stopPropagation(); toggleCompare(offer.name); }}
+                        className="sr-only peer"
+                        aria-label={compare.includes(offer.name) ? 'Remove from comparison' : 'Add to comparison'}
+                        tabIndex={0}
+                      />
+                      <div className="w-10 h-5 bg-white/10 rounded-full peer-checked:bg-white transition duration-300 relative">
+                        <div className="w-4 h-4 bg-white absolute top-0.5 left-0.5 rounded-full transition peer-checked:translate-x-5"></div>
+                      </div>
+                      <span className="text-xs text-white">Compare</span>
+                    </label>
+                  </div>
+                </div>
+              </ScrollRevealCard>
+            ))}
+            {/* Load more trigger */}
+            {hasMore && (
+              <div
+                ref={loadMoreRef}
+                className="col-span-full flex justify-center p-4"
+              >
+                {loading && page > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-6 w-6 animate-spin text-white" />
+                    <span className="text-white">Loading more...</span>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
-        </div>
+            )}
+          </div>
         ) : (
           <div className="w-full h-[500px] rounded-lg overflow-hidden mb-4">
             {hotelMapLocations.length === 0 ? (
@@ -773,7 +829,7 @@ const HotelSearch: React.FC = () => {
                         <Popup autoPan className="animate-fade-in-up">
                           <div className="p-2 min-w-[180px] max-w-[220px] relative">
                             {location.imageUrl && (
-                              <img src={location.imageUrl} alt={location.name} className="w-full h-20 object-cover rounded mb-2" />
+                              <img src={location.imageUrl} alt={location.name} className="w-full h-20 object-cover rounded mb-2" loading="lazy" />
                             )}
                             <div className="font-bold text-base mb-1">{location.name}</div>
                             <div className="text-xs text-gray-500 mb-1">{location.description}</div>

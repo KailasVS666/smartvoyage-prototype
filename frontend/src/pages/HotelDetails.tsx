@@ -1,5 +1,5 @@
-import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import Navigation from "../components/Navigation";
 import ItineraryMap from "../components/ItineraryMap";
 import { toast } from "../components/ui/use-toast";
@@ -7,6 +7,9 @@ import { Dialog, DialogContent } from "../components/ui/dialog";
 import { useAuth } from "../contexts/AuthContext";
 import { addFavorite as addFavoriteCloud, removeFavorite as removeFavoriteCloud, getUserFavorites } from "../services/favoriteService";
 import { Review, getHotelReviews, addHotelReview, updateHotelReview, deleteHotelReview, onHotelReviewsSnapshot } from '../services/reviewService';
+import { HotelDetailsSkeleton, ReviewSkeleton } from '../components/ui/skeleton';
+import { addToRecentlyViewed } from '../components/RecentlyViewed';
+import { useScrollReveal } from '../hooks/useScrollReveal';
 
 interface HotelDetailsState {
   hotel: {
@@ -223,14 +226,16 @@ const BookingModal: React.FC<{
 };
 
 const HotelDetails: React.FC = () => {
+  const { hotelName } = useParams<{ hotelName: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const state = location.state as HotelDetailsState | undefined;
-  const hotel = state?.hotel;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [hotelData, setHotelData] = useState<HotelDetailsState['hotel'] | null>(null);
   const [imgIdx, setImgIdx] = React.useState(0);
   const [imgAnim, setImgAnim] = React.useState(false);
   // Images and gallery info (move up for use in effects)
-  const images = hotel?.images || (hotel?.imageUrl ? [hotel.imageUrl] : []);
+  const images = hotelData?.images || (hotelData?.imageUrl ? [hotelData.imageUrl] : []);
   const hasGallery = Array.isArray(images) && images.length > 1;
   // Local reviews state for demo submission
   const [reviews, setReviews] = React.useState<Review[]>([]);
@@ -240,14 +245,13 @@ const HotelDetails: React.FC = () => {
   const [reviewSuccess, setReviewSuccess] = React.useState(false);
   const [reviewError, setReviewError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
-  const reviewFormRef = React.useRef<HTMLDivElement>(null);
   const [newReviewIdx, setNewReviewIdx] = React.useState<number | null>(null);
   // --- Room Booking Demo State ---
   const [bookingModal, setBookingModal] = React.useState<{ open: boolean; roomType: string | null }>({ open: false, roomType: null });
   const [bookingSubmitting, setBookingSubmitting] = React.useState(false);
   const [bookingSuccess, setBookingSuccess] = React.useState(false);
   // Track booked rooms in localStorage (per hotel+room type)
-  const hotelKey = hotel ? `bookedRooms_${hotel.name}` : '';
+  const hotelKey = hotelData ? `bookedRooms_${hotelData.name}` : '';
   const [bookedRooms, setBookedRooms] = React.useState<string[]>(() => {
     if (!hotelKey) return [];
     try {
@@ -287,12 +291,23 @@ const HotelDetails: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [imgIdx]);
 
+  // Scroll reveal refs
+  const amenitiesRef = useScrollReveal('animate-slide-in-left', 0) as React.RefObject<HTMLDivElement>;
+  const offersRef = useScrollReveal('animate-slide-in-right', 100) as React.RefObject<HTMLDivElement>;
+  const roomsRef = useScrollReveal('animate-slide-in-left', 200) as React.RefObject<HTMLDivElement>;
+  const reviewsRef = useScrollReveal('animate-slide-in-left', 300) as React.RefObject<HTMLDivElement>;
+  const reviewFormRevealRef = useScrollReveal('animate-slide-in-right', 400) as React.RefObject<HTMLDivElement>;
+  const policiesRef = useScrollReveal('animate-slide-in-left', 500) as React.RefObject<HTMLDivElement>;
+  const accessibilityRef = useScrollReveal('animate-slide-in-right', 600) as React.RefObject<HTMLDivElement>;
+  const nearbyRef = useScrollReveal('animate-slide-in-left', 700) as React.RefObject<HTMLDivElement>;
+  const locationRef = useScrollReveal('animate-slide-in-right', 800) as React.RefObject<HTMLDivElement>;
+
   // Scroll to form on error
   React.useEffect(() => {
-    if (reviewError && reviewFormRef.current) {
-      reviewFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (reviewError && reviewFormRevealRef.current) {
+      reviewFormRevealRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  }, [reviewError]);
+  }, [reviewError, reviewFormRevealRef]);
 
   // Animate new review
   React.useEffect(() => {
@@ -338,7 +353,7 @@ const HotelDetails: React.FC = () => {
 
     setSubmitting(true);
     try {
-      if (!hotel) return;
+      if (!hotelData) return;
       const newReview = {
         username: user.displayName || 'Anonymous User',
         rating: Number(reviewForm.rating),
@@ -346,7 +361,7 @@ const HotelDetails: React.FC = () => {
         avatarUrl: user.photoURL || defaultAvatar,
         timestamp: Date.now(),
       };
-      await addHotelReview(hotel.name, newReview);
+      await addHotelReview(hotelData.name, newReview);
       setReviews(revs => [newReview, ...revs]);
       setReviewForm({ rating: 5, comment: '' });
       setReviewSuccess(true);
@@ -365,19 +380,19 @@ const HotelDetails: React.FC = () => {
 
   // Sync favorite status with Firestore/localStorage on mount or user change
   React.useEffect(() => {
-    if (!hotel) return;
+    if (!hotelData) return;
     async function checkFavorite() {
       if (user) {
         try {
           const favs = await getUserFavorites(user.uid);
-          setIsFavorite(favs.includes(hotel.name));
+          setIsFavorite(favs.includes(hotelData.name));
         } catch {
           setIsFavorite(false);
         }
       } else {
         try {
           const favs = JSON.parse(localStorage.getItem('hotelFavorites') || '[]');
-          setIsFavorite(favs.includes(hotel.name));
+          setIsFavorite(favs.includes(hotelData.name));
         } catch {
           setIsFavorite(false);
         }
@@ -385,20 +400,20 @@ const HotelDetails: React.FC = () => {
     }
     checkFavorite();
     // eslint-disable-next-line
-  }, [user, hotel?.name]);
+  }, [user, hotelData?.name]);
 
   const toggleFavorite = async () => {
-    if (!hotel) return;
+    if (!hotelData) return;
     if (user) {
       try {
         if (isFavorite) {
-          await removeFavoriteCloud(user.uid, hotel.name);
+          await removeFavoriteCloud(user.uid, hotelData.name);
           setIsFavorite(false);
-          toast({ title: "Removed from Favorites", description: `${hotel.name} has been removed from your favorites.` });
+          toast({ title: "Removed from Favorites", description: `${hotelData.name} has been removed from your favorites.` });
         } else {
-          await addFavoriteCloud(user.uid, hotel.name);
+          await addFavoriteCloud(user.uid, hotelData.name);
           setIsFavorite(true);
-          toast({ title: "Added to Favorites", description: `${hotel.name} has been added to your favorites!` });
+          toast({ title: "Added to Favorites", description: `${hotelData.name} has been added to your favorites!` });
         }
       } catch {
         toast({ title: "Error", description: "Failed to update favorites in the cloud.", variant: "destructive" });
@@ -411,11 +426,11 @@ const HotelDetails: React.FC = () => {
         // Ignore JSON parse errors and use empty array
       }
       if (isFavorite) {
-        favs = favs.filter(f => f !== hotel.name);
-        toast({ title: "Removed from Favorites", description: `${hotel.name} has been removed from your favorites.` });
+        favs = favs.filter(f => f !== hotelData.name);
+        toast({ title: "Removed from Favorites", description: `${hotelData.name} has been removed from your favorites.` });
       } else {
-        favs.push(hotel.name);
-        toast({ title: "Added to Favorites", description: `${hotel.name} has been added to your favorites!` });
+        favs.push(hotelData.name);
+        toast({ title: "Added to Favorites", description: `${hotelData.name} has been added to your favorites!` });
       }
       localStorage.setItem('hotelFavorites', JSON.stringify(favs));
       setIsFavorite(!isFavorite);
@@ -468,15 +483,15 @@ const HotelDetails: React.FC = () => {
 
   // Load reviews from Firestore on mount (real-time)
   React.useEffect(() => {
-    if (!hotel) return;
+    if (!hotelData) return;
     setReviewsLoading(true);
     setReviewsError(null);
-    const unsubscribe = onHotelReviewsSnapshot(hotel.name, (newReviews) => {
+    const unsubscribe = onHotelReviewsSnapshot(hotelData.name, (newReviews) => {
       setReviews(newReviews);
       setReviewsLoading(false);
     });
     return () => unsubscribe();
-  }, [hotel?.name]);
+  }, [hotelData?.name]);
 
   // Edit review handlers
   const startEdit = (idx: number) => {
@@ -488,9 +503,9 @@ const HotelDetails: React.FC = () => {
     setEditForm(f => ({ ...f, [e.target.name]: e.target.value }));
   };
   const saveEdit = async (idx: number) => {
-    if (!hotel) return;
+    if (!hotelData) return;
     try {
-      await updateHotelReview(hotel.name, idx, { ...reviews[idx], rating: Number(editForm.rating), comment: editForm.comment });
+      await updateHotelReview(hotelData.name, idx, { ...reviews[idx], rating: Number(editForm.rating), comment: editForm.comment });
       setReviews(revs => {
         const updated = [...revs];
         updated[idx] = { ...updated[idx], rating: Number(editForm.rating), comment: editForm.comment };
@@ -503,9 +518,9 @@ const HotelDetails: React.FC = () => {
     }
   };
   const deleteReview = async (idx: number) => {
-    if (!hotel) return;
+    if (!hotelData) return;
     try {
-      await deleteHotelReview(hotel.name, idx);
+      await deleteHotelReview(hotelData.name, idx);
       setReviews(revs => revs.filter((_, i) => i !== idx));
       toast({ title: "Review Deleted", description: "Your review has been deleted." });
     } catch {
@@ -520,392 +535,435 @@ const HotelDetails: React.FC = () => {
   // Default avatar
   const defaultAvatar = 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff';
 
-  if (!hotel) {
+  useEffect(() => {
+    const loadHotelDetails = async () => {
+      setLoading(true);
+      try {
+        const state = location.state as HotelDetailsState;
+        if (state?.hotel) {
+          setHotelData(state.hotel);
+          // Add to recently viewed
+          addToRecentlyViewed({
+            name: state.hotel.name,
+            address: state.hotel.address,
+            price: state.hotel.price,
+            imageUrl: state.hotel.imageUrl || state.hotel.images?.[0],
+            rating: state.hotel.rating
+          });
+        }
+        // ... rest of the existing loading logic ...
+      } catch (err) {
+        console.error('Error loading hotel details:', err);
+        setError('Failed to load hotel details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHotelDetails();
+  }, [location.state, hotelName]);
+
+  if (!hotelData) {
     return <div className="p-8 text-center">No hotel data found. <button className="underline text-blue-600" onClick={() => navigate(-1)}>Go Back</button></div>;
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <Navigation />
-      <div className="max-w-xl mx-auto p-4">
-        <button onClick={() => navigate(-1)} className="mb-4 text-blue-400 underline">&larr; Back</button>
-        {/* Favorite Button */}
-        <button
-          onClick={toggleFavorite}
-          className={`mb-4 flex items-center gap-2 px-3 py-1 rounded-full border border-pink-500 ${isFavorite ? 'bg-pink-500 text-white' : 'bg-black text-pink-500'} hover:bg-pink-600 hover:text-white transition`}
-          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill={isFavorite ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" className="h-6 w-6">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21C12 21 4 13.5 4 8.5C4 5.42 6.42 3 9.5 3C11.24 3 12.91 3.81 14 5.08C15.09 3.81 16.76 3 18.5 3C21.58 3 24 5.42 24 8.5C24 13.5 16 21 16 21H12Z" />
-          </svg>
-          {isFavorite ? 'Favorited' : 'Add to Favorites'}
-        </button>
-        {hasGallery ? (
-          <div className="relative mb-4">
-            <img
-              src={images[imgIdx]}
-              alt={hotel.name}
-              className={`w-full h-64 object-cover rounded transition-all duration-500 ease-in-out ${imgAnim ? 'opacity-0 scale-105' : 'opacity-100 scale-100'} cursor-pointer`}
-              onAnimationEnd={() => setImgAnim(false)}
-              onClick={() => setGalleryOpen(true)}
-            />
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-900 to-black">
+      {loading ? (
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <HotelDetailsSkeleton />
+        </div>
+      ) : error ? (
+        <div className="max-w-6xl mx-auto px-4 py-8 text-center">
+          <div className="text-red-500">{error}</div>
+        </div>
+      ) : hotelData ? (
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <Navigation />
+          <div className="max-w-xl mx-auto p-4">
+            <button onClick={() => navigate(-1)} className="mb-4 text-blue-400 underline">&larr; Back</button>
+            {/* Favorite Button */}
             <button
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 rounded-full px-2 py-1 text-lg"
-              onClick={() => setImgIdx((imgIdx - 1 + images.length) % images.length)}
-              aria-label="Previous image"
-            >&larr;</button>
-            <button
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 rounded-full px-2 py-1 text-lg"
-              onClick={() => setImgIdx((imgIdx + 1) % images.length)}
-              aria-label="Next image"
-            >&rarr;</button>
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-              {images.map((_, i) => (
-                <span key={i} className={`inline-block w-2 h-2 rounded-full ${i === imgIdx ? 'bg-blue-400' : 'bg-gray-600'}`}></span>
-              ))}
-            </div>
-            {/* Gallery Modal */}
-            <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
-              <DialogContent className="max-w-2xl p-0 bg-black">
-                <div
-                  className="relative flex flex-col items-center justify-center"
-                  onTouchStart={handleTouchStart}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
-                >
-                  <img
-                    src={images[imgIdx]}
-                    alt={hotel.name}
-                    className="w-full max-h-[80vh] object-contain bg-black rounded"
-                  />
-                  {/* Caption if available */}
-                  <div className="text-white text-center mt-2 mb-1 text-sm opacity-80">
-                    {hotel.rooms && hotel.rooms[imgIdx]?.type ? (
-                      <span>{hotel.rooms[imgIdx].type}</span>
-                    ) : hotel.description ? (
-                      <span>{hotel.description}</span>
-                    ) : (
-                      <span>Image {imgIdx + 1} of {images.length}</span>
-                    )}
-                  </div>
-                  {images.length > 1 && (
-                    <>
-                      <button
-                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 rounded-full px-3 py-2 text-2xl"
-                        onClick={() => setImgIdx((imgIdx - 1 + images.length) % images.length)}
-                        aria-label="Previous image"
-                      >&larr;</button>
-                      <button
-                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 rounded-full px-3 py-2 text-2xl"
-                        onClick={() => setImgIdx((imgIdx + 1) % images.length)}
-                        aria-label="Next image"
-                      >&rarr;</button>
-                    </>
-                  )}
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                    {images.map((_, i) => (
-                      <span key={i} className={`inline-block w-3 h-3 rounded-full border-2 ${i === imgIdx ? 'bg-blue-400 border-blue-400' : 'bg-gray-600 border-gray-400'}`}></span>
-                    ))}
-                  </div>
+              onClick={toggleFavorite}
+              className={`mb-4 flex items-center gap-2 px-3 py-1 rounded-full border border-pink-500 ${isFavorite ? 'bg-pink-500 text-white animate-bounce' : 'bg-black text-pink-500'} hover:bg-pink-600 hover:text-white transition`}
+              aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill={isFavorite ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" className="h-6 w-6">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21C12 21 4 13.5 4 8.5C4 5.42 6.42 3 9.5 3C11.24 3 12.91 3.81 14 5.08C15.09 3.81 16.76 3 18.5 3C21.58 3 24 5.42 24 8.5C24 13.5 16 21 16 21H12Z" />
+              </svg>
+              {isFavorite ? 'Favorited' : 'Add to Favorites'}
+            </button>
+            {hasGallery ? (
+              <div className="relative mb-4">
+                <img
+                  src={images[imgIdx]}
+                  alt={hotelData.name}
+                  className={`w-full h-64 object-cover rounded transition-all duration-500 ease-in-out ${imgAnim ? 'opacity-0 scale-105' : 'opacity-100 scale-100'} cursor-pointer hover:animate-scale`}
+                  loading="eager"
+                  onAnimationEnd={() => setImgAnim(false)}
+                  onClick={() => setGalleryOpen(true)}
+                />
+                <button
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 rounded-full px-2 py-1 text-lg"
+                  onClick={() => setImgIdx((imgIdx - 1 + images.length) % images.length)}
+                  aria-label="Previous image"
+                >&larr;</button>
+                <button
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 rounded-full px-2 py-1 text-lg"
+                  onClick={() => setImgIdx((imgIdx + 1) % images.length)}
+                  aria-label="Next image"
+                >&rarr;</button>
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                  {images.map((_, i) => (
+                    <span key={i} className={`inline-block w-2 h-2 rounded-full ${i === imgIdx ? 'bg-blue-400' : 'bg-gray-600'}`}></span>
+                  ))}
                 </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        ) : images.length === 1 ? (
-          <img src={images[0]} alt={hotel.name} className="w-full h-64 object-cover rounded mb-4 transition-all duration-500" />
-        ) : (
-          <div className="w-full h-64 flex items-center justify-center bg-gray-800 rounded mb-4 text-gray-400 transition-all duration-500">No image available</div>
-        )}
-        <h1 className="text-3xl font-bold mb-2 text-white">{hotel.name}</h1>
-        {hotel.rating && hotel.rating > 0 && <div className="mb-2 text-blue-300">Rating: {hotel.rating} ⭐</div>}
-        {hotel.address && <div className="mb-2 text-gray-300">{hotel.address}</div>}
-        {hotel.price && <div className="mb-2 font-semibold text-green-400">Price: ${hotel.price}</div>}
-        {hotel.description && hotel.description.length > 0 && <div className="mb-2 text-gray-200">{hotel.description}</div>}
-        {hotel.bookingLink && (
-          <a href={hotel.bookingLink} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline mb-2 block">Book Now</a>
-        )}
-        {/* Animate each section fade-in */}
-        <div className="space-y-6">
-          {hotel.amenities && hotel.amenities.length > 0 && (
-            <div className="mb-4 animate-fade-in-up">
-              <h2 className="text-xl font-semibold mb-1 text-white">Amenities</h2>
-              <div className="flex flex-wrap gap-2">
-                {hotel.amenities.map((a, i) => (
-                  <span key={i} className="bg-blue-900 text-blue-200 px-2 py-1 rounded text-xs font-medium">{a}</span>
-                ))}
-              </div>
-            </div>
-          )}
-          {hotel.specialOffers && hotel.specialOffers.length > 0 && (
-            <div className="mb-4 animate-fade-in-up">
-              <h2 className="text-xl font-semibold mb-1 text-white">Special Offers</h2>
-              <ul className="list-disc list-inside text-green-400">
-                {hotel.specialOffers.map((offer, i) => (
-                  <li key={i}>{offer}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {hotel.rooms && hotel.rooms.length > 0 && (
-            <div className="mb-4 animate-fade-in-up">
-              <h2 className="text-xl font-semibold mb-1 text-white">Rooms & Availability</h2>
-              <div className="space-y-2">
-                {hotel.rooms.map((room, i) => {
-                  const isBooked = bookedRooms.includes(room.type);
-                  return (
-                    <div key={i} className="border border-gray-700 rounded p-2 flex flex-col md:flex-row md:items-center md:justify-between bg-gray-900 relative overflow-hidden">
-                      <div>
-                        <div className="font-semibold text-white">{room.type}</div>
-                        <div className="text-gray-300 text-sm">${room.price}</div>
-                        <div className="text-xs text-gray-400">{room.availability ? 'Available' : 'Sold Out'}</div>
-                        {room.availability && (
-                          <button
-                            className={`mt-2 px-4 py-1 rounded font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-400 text-white ${isBooked ? 'bg-green-700 cursor-not-allowed opacity-70' : 'bg-blue-600 hover:bg-blue-700'}`}
-                            onClick={() => !isBooked && openBooking(room.type)}
-                            disabled={isBooked}
-                            aria-disabled={isBooked}
-                            aria-label={isBooked ? 'Room already booked' : `Book ${room.type}`}
-                          >
-                            {isBooked ? 'Booked!' : 'Book Room'}
-                          </button>
+                {/* Gallery Modal */}
+                <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
+                  <DialogContent className="max-w-2xl p-0 bg-black">
+                    <div
+                      className="relative flex flex-col items-center justify-center"
+                      onTouchStart={handleTouchStart}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                    >
+                      <img
+                        src={images[imgIdx]}
+                        alt={hotelData.name}
+                        className="w-full max-h-[80vh] object-contain bg-black rounded"
+                        loading="lazy"
+                      />
+                      {/* Caption if available */}
+                      <div className="text-white text-center mt-2 mb-1 text-sm opacity-80">
+                        {hotelData.rooms && hotelData.rooms[imgIdx]?.type ? (
+                          <span>{hotelData.rooms[imgIdx].type}</span>
+                        ) : hotelData.description ? (
+                          <span>{hotelData.description}</span>
+                        ) : (
+                          <span>Image {imgIdx + 1} of {images.length}</span>
                         )}
-                        {isBooked && <span className="ml-2 text-green-400 font-bold animate-fade-in-up">✔</span>}
                       </div>
-                      {room.images && room.images.length > 0 && (
-                        <img src={room.images[0]} alt={room.type} className="w-24 h-16 object-cover rounded mt-2 md:mt-0" />
+                      {images.length > 1 && (
+                        <>
+                          <button
+                            className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 rounded-full px-3 py-2 text-2xl"
+                            onClick={() => setImgIdx((imgIdx - 1 + images.length) % images.length)}
+                            aria-label="Previous image"
+                          >&larr;</button>
+                          <button
+                            className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 rounded-full px-3 py-2 text-2xl"
+                            onClick={() => setImgIdx((imgIdx + 1) % images.length)}
+                            aria-label="Next image"
+                          >&rarr;</button>
+                        </>
                       )}
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Booking Modal */}
-              <BookingModal
-                open={bookingModal.open}
-                onClose={closeBooking}
-                onSubmit={handleBookingSubmit}
-                roomType={bookingModal.roomType || ''}
-                submitting={bookingSubmitting}
-                success={bookingSuccess}
-                checkIn={checkIn}
-                checkOut={checkOut}
-              />
-            </div>
-          )}
-          {reviewsLoading ? (
-            <div className="text-gray-400">Loading reviews...</div>
-          ) : reviewsError ? (
-            <div className="text-red-400">{reviewsError}</div>
-          ) : reviews && reviews.length > 0 && (
-            <div className="mb-4 animate-fade-in-up">
-              <h2 className="text-xl font-semibold mb-1 text-white">Guest Reviews</h2>
-              <div className="flex items-center gap-3 mb-2">
-                {avgRating && <span className="text-yellow-300 font-bold text-lg">{avgRating} ★</span>}
-                <span className="text-gray-400 text-sm">{reviews.length} review{reviews.length !== 1 ? 's' : ''}</span>
-              </div>
-              <div className="space-y-2">
-                {paginatedReviews.map((review, i) => (
-                  <div
-                    key={i}
-                    className={`border border-gray-700 rounded p-2 bg-gray-900 transition-all duration-700 ${i === newReviewIdx ? 'animate-fade-in-up shadow-lg ring-2 ring-blue-400' : ''}`}
-                    aria-live={i === 0 && newReviewIdx === 0 ? 'polite' : undefined}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={review.avatarUrl || defaultAvatar}
-                          alt={review.username}
-                          className="w-8 h-8 rounded-full object-cover border border-gray-700"
-                        />
-                        <div className="font-semibold text-sm text-yellow-300">{review.username} <span className="text-yellow-400">{'★'.repeat(review.rating)}</span></div>
-                      </div>
-                      {user && user.displayName && review.username === user.displayName && (
-                        <div className="flex gap-2">
-                          {editingIdx === i ? (
-                            <>
-                              <button className="text-green-400 text-xs underline" onClick={() => saveEdit(i)}>Save</button>
-                              <button className="text-gray-400 text-xs underline" onClick={cancelEdit}>Cancel</button>
-                            </>
-                          ) : (
-                            <>
-                              <button className="text-blue-400 text-xs underline" onClick={() => startEdit(i)}>Edit</button>
-                              <button className="text-red-400 text-xs underline" onClick={() => deleteReview(i)}>Delete</button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 mb-1">
-                      {review.timestamp && (
-                        <span className="text-xs text-gray-400">{new Date(review.timestamp).toLocaleDateString()} {new Date(review.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      )}
-                    </div>
-                    {editingIdx === i ? (
-                      <>
-                        <select
-                          name="rating"
-                          value={editForm.rating}
-                          onChange={handleEditChange}
-                          className="w-full px-2 py-1 rounded bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition mt-1 mb-1"
-                        >
-                          {[5,4,3,2,1].map(r => <option key={r} value={r}>{r} Star{r > 1 ? 's' : ''}</option>)}
-                        </select>
-                        <textarea
-                          name="comment"
-                          value={editForm.comment}
-                          onChange={handleEditChange}
-                          className="w-full px-2 py-1 rounded bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition mb-1"
-                          rows={2}
-                        />
-                      </>
-                    ) : (
-                      <div className="text-gray-200 text-sm mt-1">{review.comment}</div>
-                    )}
-                  </div>
-                ))}
-                {reviews.length > paginatedReviews.length && (
-                  <button
-                    className="mt-2 px-4 py-1 rounded bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 transition"
-                    onClick={() => setReviewsPage(p => p + 1)}
-                  >Load More</button>
-                )}
-              </div>
-            </div>
-          )}
-          {/* Review Submission Form */}
-          <div className="mb-8 animate-fade-in-up" ref={reviewFormRef}>
-            {user && user.displayName && userHasReview ? (
-              <div className="bg-gray-900 p-4 rounded text-yellow-300 text-center">
-                <span>You have already reviewed this hotel. You can edit or delete your review above.</span>
-              </div>
-            ) : (
-              <>
-                <h2 className="text-lg font-semibold mb-2 text-white">Add Your Review</h2>
-                <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 space-y-4">
-                  <h3 className="text-xl font-semibold text-white">Write a Review</h3>
-                  <form onSubmit={handleReviewSubmit} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Rating</label>
-                      <div className="flex flex-col gap-2">
-                        {[5, 4, 3, 2, 1].map((stars) => (
-                          <label
-                            key={stars}
-                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-                              Number(reviewForm.rating) === stars
-                                ? 'bg-white/20 border border-white/30'
-                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="rating"
-                              value={stars}
-                              checked={Number(reviewForm.rating) === stars}
-                              onChange={handleReviewChange}
-                              className="sr-only"
-                            />
-                            <div className="flex items-center gap-1">
-                              {Array.from({ length: stars }).map((_, i) => (
-                                <span key={i} className="text-yellow-400 text-xl">★</span>
-                              ))}
-                              {Array.from({ length: 5 - stars }).map((_, i) => (
-                                <span key={i} className="text-gray-500 text-xl">★</span>
-                              ))}
-                            </div>
-                            <span className="text-white text-sm">
-                              {stars === 5 && "Excellent - Highly Recommended"}
-                              {stars === 4 && "Very Good - Great Experience"}
-                              {stars === 3 && "Good - Satisfactory"}
-                              {stars === 2 && "Fair - Some Issues"}
-                              {stars === 1 && "Poor - Not Recommended"}
-                            </span>
-                          </label>
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                        {images.map((_, i) => (
+                          <span key={i} className={`inline-block w-3 h-3 rounded-full border-2 ${i === imgIdx ? 'bg-blue-400 border-blue-400' : 'bg-gray-600 border-gray-400'}`}></span>
                         ))}
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Your Review</label>
-                      <textarea
-                        name="comment"
-                        value={reviewForm.comment}
-                        onChange={handleReviewChange}
-                        rows={4}
-                        className="mt-1 block w-full rounded-lg bg-white/10 border border-white/20 text-white shadow-sm focus:border-white focus:ring focus:ring-white/30 focus:ring-opacity-50 p-3"
-                        placeholder="Share your experience with this hotel..."
-                      ></textarea>
-                    </div>
-                    {reviewError && (
-                      <div className="text-red-400 text-sm bg-red-900/20 border border-red-900/30 rounded-lg p-3">
-                        {reviewError}
-                      </div>
-                    )}
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="w-full bg-white text-black hover:bg-gray-100 rounded-lg px-4 py-3 shadow-md transition-all duration-200 font-semibold flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-white active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {submitting ? (
-                        <>
-                          <span className="animate-spin">⏳</span>
-                          Submitting...
-                        </>
-                      ) : 'Submit Review'}
-                    </button>
-                  </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            ) : images.length === 1 ? (
+              <img src={images[0]} alt={hotelData.name} className="w-full h-64 object-cover rounded mb-4 transition-all duration-500" />
+            ) : (
+              <div className="w-full h-64 flex items-center justify-center bg-gray-800 rounded mb-4 text-gray-400 transition-all duration-500">No image available</div>
+            )}
+            <h1 className="text-3xl font-bold mb-2 text-white">{hotelData.name}</h1>
+            {hotelData.rating && hotelData.rating > 0 && <div className="mb-2 text-blue-300">Rating: {hotelData.rating} ⭐</div>}
+            {hotelData.address && <div className="mb-2 text-gray-300">{hotelData.address}</div>}
+            {hotelData.price && <div className="mb-2 font-semibold text-green-400">Price: ${hotelData.price}</div>}
+            {hotelData.description && hotelData.description.length > 0 && <div className="mb-2 text-gray-200">{hotelData.description}</div>}
+            {hotelData.bookingLink && (
+              <a href={hotelData.bookingLink} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline mb-2 block">Book Now</a>
+            )}
+            {/* Animate each section fade-in */}
+            <div className="space-y-6">
+              {hotelData.amenities && hotelData.amenities.length > 0 && (
+                <div ref={amenitiesRef} className="mb-4">
+                  <h2 className="text-xl font-semibold mb-1 text-white">Amenities</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {hotelData.amenities.map((a, i) => (
+                      <span key={i} className="bg-blue-900 text-blue-200 px-2 py-1 rounded text-xs font-medium">{a}</span>
+                    ))}
+                  </div>
                 </div>
-              </>
+              )}
+              {hotelData.specialOffers && hotelData.specialOffers.length > 0 && (
+                <div ref={offersRef} className="mb-4">
+                  <h2 className="text-xl font-semibold mb-1 text-white">Special Offers</h2>
+                  <ul className="list-disc list-inside text-green-400">
+                    {hotelData.specialOffers.map((offer, i) => (
+                      <li key={i}>{offer}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {hotelData.rooms && hotelData.rooms.length > 0 && (
+                <div ref={roomsRef} className="mb-4">
+                  <h2 className="text-xl font-semibold mb-1 text-white">Rooms & Availability</h2>
+                  <div className="space-y-2">
+                    {hotelData.rooms.map((room, i) => {
+                      const isBooked = bookedRooms.includes(room.type);
+                      return (
+                        <div key={i} className="border border-gray-700 rounded p-2 flex flex-col md:flex-row md:items-center md:justify-between bg-gray-900 relative overflow-hidden">
+                          <div>
+                            <div className="font-semibold text-white">{room.type}</div>
+                            <div className="text-gray-300 text-sm">${room.price}</div>
+                            <div className="text-xs text-gray-400">{room.availability ? 'Available' : 'Sold Out'}</div>
+                            {room.availability && (
+                              <button
+                                className={`mt-2 px-4 py-1 rounded font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-400 text-white ${isBooked ? 'bg-green-700 cursor-not-allowed opacity-70' : 'bg-blue-600 hover:bg-blue-700 hover:animate-scale'}`}
+                                onClick={() => !isBooked && openBooking(room.type)}
+                                disabled={isBooked}
+                                aria-disabled={isBooked}
+                                aria-label={isBooked ? 'Room already booked' : `Book ${room.type}`}
+                              >
+                                {isBooked ? 'Booked!' : 'Book Room'}
+                              </button>
+                            )}
+                            {isBooked && <span className="ml-2 text-green-400 font-bold animate-bounce">✔</span>}
+                          </div>
+                          {room.images && room.images.length > 0 && (
+                            <img src={room.images[0]} alt={room.type} className="w-24 h-16 object-cover rounded mt-2 md:mt-0" loading="lazy" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Booking Modal */}
+                  <BookingModal
+                    open={bookingModal.open}
+                    onClose={closeBooking}
+                    onSubmit={handleBookingSubmit}
+                    roomType={bookingModal.roomType || ''}
+                    submitting={bookingSubmitting}
+                    success={bookingSuccess}
+                    checkIn={checkIn}
+                    checkOut={checkOut}
+                  />
+                </div>
+              )}
+              {reviewsLoading ? (
+                <div className="text-gray-400">Loading reviews...</div>
+              ) : reviewsError ? (
+                <div className="text-red-400">{reviewsError}</div>
+              ) : reviews && reviews.length > 0 && (
+                <div ref={reviewsRef} className="mb-4">
+                  <h2 className="text-xl font-semibold mb-1 text-white">Guest Reviews</h2>
+                  <div className="flex items-center gap-3 mb-2">
+                    {avgRating && <span className="text-yellow-300 font-bold text-lg">{avgRating} ★</span>}
+                    <span className="text-gray-400 text-sm">{reviews.length} review{reviews.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {paginatedReviews.map((review, i) => (
+                      <div
+                        key={i}
+                        className={`border border-gray-700 rounded p-2 bg-gray-900 transition-all duration-700 ${i === newReviewIdx ? 'animate-fade-in-up shadow-lg ring-2 ring-blue-400' : ''}`}
+                        aria-live={i === 0 && newReviewIdx === 0 ? 'polite' : undefined}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={review.avatarUrl || defaultAvatar}
+                              alt={review.username}
+                              className="w-8 h-8 rounded-full object-cover border border-gray-700"
+                              loading="lazy"
+                            />
+                            <div className="font-semibold text-sm text-yellow-300">{review.username} <span className="text-yellow-400">{'★'.repeat(review.rating)}</span></div>
+                          </div>
+                          {user && user.displayName && review.username === user.displayName && (
+                            <div className="flex gap-2">
+                              {editingIdx === i ? (
+                                <>
+                                  <button className="text-green-400 text-xs underline" onClick={() => saveEdit(i)}>Save</button>
+                                  <button className="text-gray-400 text-xs underline" onClick={cancelEdit}>Cancel</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button className="text-blue-400 text-xs underline" onClick={() => startEdit(i)}>Edit</button>
+                                  <button className="text-red-400 text-xs underline" onClick={() => deleteReview(i)}>Delete</button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 mb-1">
+                          {review.timestamp && (
+                            <span className="text-xs text-gray-400">{new Date(review.timestamp).toLocaleDateString()} {new Date(review.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          )}
+                        </div>
+                        {editingIdx === i ? (
+                          <>
+                            <select
+                              name="rating"
+                              value={editForm.rating}
+                              onChange={handleEditChange}
+                              className="w-full px-2 py-1 rounded bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition mt-1 mb-1"
+                            >
+                              {[5,4,3,2,1].map(r => <option key={r} value={r}>{r} Star{r > 1 ? 's' : ''}</option>)}
+                            </select>
+                            <textarea
+                              name="comment"
+                              value={editForm.comment}
+                              onChange={handleEditChange}
+                              className="w-full px-2 py-1 rounded bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition mb-1"
+                              rows={2}
+                            />
+                          </>
+                        ) : (
+                          <div className="text-gray-200 text-sm mt-1">{review.comment}</div>
+                        )}
+                      </div>
+                    ))}
+                    {reviews.length > paginatedReviews.length && (
+                      <button
+                        className="mt-2 px-4 py-1 rounded bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 transition"
+                        onClick={() => setReviewsPage(p => p + 1)}
+                      >Load More</button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Review Submission Form */}
+              <div ref={reviewFormRevealRef} className="mb-8">
+                {user && user.displayName && userHasReview ? (
+                  <div className="bg-gray-900 p-4 rounded text-yellow-300 text-center">
+                    <span>You have already reviewed this hotel. You can edit or delete your review above.</span>
+                  </div>
+                ) : (
+                  <>
+                    <h2 className="text-lg font-semibold mb-2 text-white">Add Your Review</h2>
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 space-y-4">
+                      <h3 className="text-xl font-semibold text-white">Write a Review</h3>
+                      <form onSubmit={handleReviewSubmit} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Rating</label>
+                          <div className="flex flex-col gap-2">
+                            {[5, 4, 3, 2, 1].map((stars) => (
+                              <label
+                                key={stars}
+                                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200 ${
+                                  Number(reviewForm.rating) === stars
+                                    ? 'bg-white/20 border border-white/30'
+                                    : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="rating"
+                                  value={stars}
+                                  checked={Number(reviewForm.rating) === stars}
+                                  onChange={handleReviewChange}
+                                  className="sr-only"
+                                />
+                                <div className="flex items-center gap-1">
+                                  {Array.from({ length: stars }).map((_, i) => (
+                                    <span key={i} className="text-yellow-400 text-xl">★</span>
+                                  ))}
+                                  {Array.from({ length: 5 - stars }).map((_, i) => (
+                                    <span key={i} className="text-gray-500 text-xl">★</span>
+                                  ))}
+                                </div>
+                                <span className="text-white text-sm">
+                                  {stars === 5 && "Excellent - Highly Recommended"}
+                                  {stars === 4 && "Very Good - Great Experience"}
+                                  {stars === 3 && "Good - Satisfactory"}
+                                  {stars === 2 && "Fair - Some Issues"}
+                                  {stars === 1 && "Poor - Not Recommended"}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Your Review</label>
+                          <textarea
+                            name="comment"
+                            value={reviewForm.comment}
+                            onChange={handleReviewChange}
+                            rows={4}
+                            className="mt-1 block w-full rounded-lg bg-white/10 border border-white/20 text-white shadow-sm focus:border-white focus:ring focus:ring-white/30 focus:ring-opacity-50 p-3"
+                            placeholder="Share your experience with this hotel..."
+                          ></textarea>
+                        </div>
+                        {reviewError && (
+                          <div className="text-red-400 text-sm bg-red-900/20 border border-red-900/30 rounded-lg p-3">
+                            {reviewError}
+                          </div>
+                        )}
+                        <button
+                          type="submit"
+                          disabled={submitting}
+                          className={`w-full bg-white text-black hover:bg-gray-100 hover:animate-scale rounded-lg px-4 py-3 shadow-md transition-all duration-200 font-semibold flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-white active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {submitting ? (
+                            <>
+                              <span className="animate-rotate">⏳</span>
+                              Submitting...
+                            </>
+                          ) : 'Submit Review'}
+                        </button>
+                      </form>
+                    </div>
+                  </>
+                )}
+              </div>
+              {hotelData.policies && (
+                <div ref={policiesRef} className="mb-4">
+                  <h2 className="text-xl font-semibold mb-1 text-white">Hotel Policies</h2>
+                  <ul className="list-disc list-inside text-gray-200">
+                    <li><b>Check-in:</b> {hotelData.policies.checkIn}</li>
+                    <li><b>Check-out:</b> {hotelData.policies.checkOut}</li>
+                    <li><b>Cancellation:</b> {hotelData.policies.cancellation}</li>
+                    <li><b>Payment:</b> {hotelData.policies.payment}</li>
+                  </ul>
+                </div>
+              )}
+              {hotelData.accessibility && hotelData.accessibility.length > 0 && (
+                <div ref={accessibilityRef} className="mb-4">
+                  <h2 className="text-xl font-semibold mb-1 text-white">Accessibility</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {hotelData.accessibility.map((a, i) => (
+                      <span key={i} className="bg-green-900 text-green-200 px-2 py-1 rounded text-xs font-medium">{a}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {hotelData.nearby && hotelData.nearby.length > 0 && (
+                <div ref={nearbyRef} className="mb-4">
+                  <h2 className="text-xl font-semibold mb-1 text-white">Nearby Attractions</h2>
+                  <ul className="list-disc list-inside text-blue-200">
+                    {hotelData.nearby.map((place, i) => (
+                      <li key={i}><b>{place.name}</b> ({place.type}) - {place.distance}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {hotelData.location && (
+                <div ref={locationRef} className="mb-4">
+                  <h2 className="text-xl font-semibold mb-1 text-white">Location</h2>
+                  <div className="w-full h-64 rounded overflow-hidden">
+                    <ItineraryMap
+                      locations={[{
+                        name: hotelData.name,
+                        description: hotelData.address || hotelData.description || '',
+                        lat: hotelData.location.lat,
+                        lng: hotelData.location.lng,
+                      }]}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            {hotelData.source && (
+              <div className="text-xs text-gray-500 mt-2">Data source: {hotelData.source}</div>
             )}
           </div>
-          {hotel.policies && (
-            <div className="mb-4 animate-fade-in-up">
-              <h2 className="text-xl font-semibold mb-1 text-white">Hotel Policies</h2>
-              <ul className="list-disc list-inside text-gray-200">
-                <li><b>Check-in:</b> {hotel.policies.checkIn}</li>
-                <li><b>Check-out:</b> {hotel.policies.checkOut}</li>
-                <li><b>Cancellation:</b> {hotel.policies.cancellation}</li>
-                <li><b>Payment:</b> {hotel.policies.payment}</li>
-              </ul>
-            </div>
-          )}
-          {hotel.accessibility && hotel.accessibility.length > 0 && (
-            <div className="mb-4 animate-fade-in-up">
-              <h2 className="text-xl font-semibold mb-1 text-white">Accessibility</h2>
-              <div className="flex flex-wrap gap-2">
-                {hotel.accessibility.map((a, i) => (
-                  <span key={i} className="bg-green-900 text-green-200 px-2 py-1 rounded text-xs font-medium">{a}</span>
-                ))}
-              </div>
-            </div>
-          )}
-          {hotel.nearby && hotel.nearby.length > 0 && (
-            <div className="mb-4 animate-fade-in-up">
-              <h2 className="text-xl font-semibold mb-1 text-white">Nearby Attractions</h2>
-              <ul className="list-disc list-inside text-blue-200">
-                {hotel.nearby.map((place, i) => (
-                  <li key={i}><b>{place.name}</b> ({place.type}) - {place.distance}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {hotel.location && (
-            <div className="mb-4 animate-fade-in-up">
-              <h2 className="text-xl font-semibold mb-1 text-white">Location</h2>
-              <div className="w-full h-64 rounded overflow-hidden">
-                <ItineraryMap
-                  locations={[{
-                    name: hotel.name,
-                    description: hotel.address || hotel.description || '',
-                    lat: hotel.location.lat,
-                    lng: hotel.location.lng,
-                  }]}
-                />
-              </div>
-            </div>
-          )}
         </div>
-        {hotel.source && (
-          <div className="text-xs text-gray-500 mt-2">Data source: {hotel.source}</div>
-        )}
-      </div>
+      ) : null}
     </div>
   );
 };

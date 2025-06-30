@@ -1,8 +1,10 @@
-
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { useScrollReveal } from '../hooks/useScrollReveal';
 
 const Hero = () => {
+  const contentRef = useScrollReveal('animate-fade-in-up', 0) as React.RefObject<HTMLDivElement>;
+
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Background Image with Overlay */}
@@ -11,12 +13,13 @@ const Hero = () => {
           src="https://images.unsplash.com/photo-1501854140801-50d01698950b?w=1920&h=1080&fit=crop"
           alt="Beautiful mountain landscape"
           className="w-full h-full object-cover"
+          loading="eager"
         />
         <div className="absolute inset-0 bg-black/60"></div>
       </div>
 
       {/* Content */}
-      <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
+      <div ref={contentRef} className="relative z-10 text-center px-4 max-w-4xl mx-auto">
         <h1 className="text-5xl md:text-7xl font-bold mb-6 text-white">
           Plan <span className="text-teal-400 glow-text">Smarter</span>.
           <br />

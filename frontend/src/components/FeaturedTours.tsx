@@ -1,6 +1,6 @@
-
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { useScrollReveal } from '../hooks/useScrollReveal';
 
 const FeaturedTours = () => {
   const tours = [
@@ -34,6 +34,14 @@ const FeaturedTours = () => {
     }
   ];
 
+  // Scroll reveal wrapper for tour cards
+  const ScrollRevealCard: React.FC<{ children: React.ReactNode; delay?: number }> = ({ children, delay = 0 }) => {
+    const ref = useScrollReveal('animate-fade-in-up', delay) as React.RefObject<HTMLDivElement>;
+    return (
+      <div ref={ref}>{children}</div>
+    );
+  };
+
   return (
     <section id="tours" className="py-20 bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -47,35 +55,37 @@ const FeaturedTours = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {tours.map((tour) => (
-            <div
-              key={tour.id}
-              className="group relative bg-gray-800 rounded-lg overflow-hidden hover:transform hover:scale-105 transition-all duration-300 hover:shadow-2xl hover:shadow-teal-500/10"
-            >
-              <div className="relative overflow-hidden">
-                <img
-                  src={tour.image}
-                  alt={tour.name}
-                  className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-300"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-              </div>
-              
-              <div className="p-6">
-                <h3 className="text-xl font-semibold text-white mb-2">{tour.name}</h3>
-                <p className="text-gray-400 mb-4">{tour.description}</p>
-                <div className="flex justify-between items-center">
-                  <span className="text-teal-400 font-semibold">{tour.price}</span>
-                  <Button 
-                    size="sm" 
-                    variant="ghost"
-                    className="text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 p-2"
-                  >
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
+          {tours.map((tour, idx) => (
+            <ScrollRevealCard key={tour.id} delay={idx * 80}>
+              <div
+                className="group relative bg-gray-800 rounded-lg overflow-hidden hover:transform hover:scale-105 transition-all duration-300 hover:shadow-2xl hover:shadow-teal-500/10"
+              >
+                <div className="relative overflow-hidden">
+                  <img
+                    src={tour.image}
+                    alt={tour.name}
+                    className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-300"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                </div>
+                
+                <div className="p-6">
+                  <h3 className="text-xl font-semibold text-white mb-2">{tour.name}</h3>
+                  <p className="text-gray-400 mb-4">{tour.description}</p>
+                  <div className="flex justify-between items-center">
+                    <span className="text-teal-400 font-semibold">{tour.price}</span>
+                    <Button 
+                      size="sm" 
+                      variant="ghost"
+                      className="text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 p-2"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </ScrollRevealCard>
           ))}
         </div>
       </div>
